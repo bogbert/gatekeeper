@@ -75,6 +75,15 @@ func extractIdentity(token jose.JWT) (*userContext, error) {
 		}
 	}
 
+	// @step: extract the client roles from a string containing comma separated values between square brackets (fallback solution added for Cognito)
+	if len(roleList) == 0 {
+		if strRoles, found := claims[claimStringRoles].(string); found && strRoles[0] == '[' && strRoles[len(strRoles) - 1] == ']' {
+			for _, role := range strings.Split(strRoles[1:len(strRoles) - 1], ",") {
+				roleList = append(roleList, strings.TrimSpace(role))
+			}
+		}
+	}
+
 	// @step: extract any group information from the tokens
 	groups, _, err := claims.StringsClaim(claimGroups)
 	if err != nil {
