@@ -118,7 +118,6 @@ func (c *selfSignedCertificate) rotate(ctx context.Context) error {
 	return nil
 }
 
-// Deprecated:unused
 // close is used to shutdown resources
 func (c *selfSignedCertificate) close() {
 	c.cancel()

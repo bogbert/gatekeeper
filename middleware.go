@@ -241,8 +241,7 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					//
 					// exp: expiration of the access token
 					// expiresIn: expiration of the ID token
-					conf := r.newOAuth2Config(r.config.RedirectionURL)
-					token, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(conf, refresh)
+					token, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(r.client, refresh)
 					if err != nil {
 						switch err {
 						case ErrRefreshTokenExpired:
@@ -267,7 +266,7 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					}
 					if refreshExpiresIn == 0 {
 						// refresh token expiry claims not available: try to parse refresh token
-						refreshExpiresIn = r.getAccessCookieExpiration(refresh)
+						refreshExpiresIn = r.getAccessCookieExpiration(token, refresh)
 					}
 
 					r.log.Info("injecting the refreshed access token cookie",

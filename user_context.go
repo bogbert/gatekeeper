@@ -115,13 +115,11 @@ func containsString(needle string, haystack []string) bool {
 	return false
 }
 
-// Deprecated:unused
 // isAudience checks the audience
 func (r *userContext) isAudience(aud string) bool {
 	return containsString(aud, r.audiences)
 }
 
-// Deprecated:unused
 // getRoles returns a list of roles
 func (r *userContext) getRoles() string {
 	return strings.Join(r.roles, ",")
@@ -132,13 +130,11 @@ func (r *userContext) isExpired() bool {
 	return r.expiresAt.Before(time.Now())
 }
 
-// Deprecated:unused
 // isBearer checks if the token
 func (r *userContext) isBearer() bool {
 	return r.bearerToken
 }
 
-// Deprecated:unused
 // isCookie checks if it's by a cookie
 func (r *userContext) isCookie() bool {
 	return !r.isBearer()
