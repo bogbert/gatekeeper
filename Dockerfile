@@ -31,11 +31,16 @@ WORKDIR "/opt/louketo"
 RUN echo "louketo:x:1000:louketo" >> /etc/group && \
     echo "louketo:x:1000:1000:louketo user:/opt/louketo:/sbin/nologin" >> /etc/passwd && \
     chown -R louketo:louketo /opt/louketo && \
-    chmod -R g+rw /opt/louketo
+    chmod -R g+rw /opt/louketo && \
+    mkdir -p /opt/gatekeeper && \
+    chown -R louketo:louketo /opt/gatekeeper && \
+    chmod -R g+rw /opt/gatekeeper
 
 COPY templates ./templates
 COPY --from=build-env /louketo-proxy ./
 RUN chmod +x louketo-proxy
+RUN ln -s /opt/louketo/louketo-proxy /opt/gatekeeper/keycloak-gatekeeper && \
+    chown -R louketo:louketo /opt/gatekeeper/keycloak-gatekeeper
 
 USER 1000
 ENTRYPOINT [ "/opt/louketo/louketo-proxy" ]
