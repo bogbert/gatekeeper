@@ -1,7 +1,4 @@
 NAME=louketo-proxy
-AUTHOR=louketo
-REGISTRY=docker.io
-CONTAINER_TOOL=$(shell command -v podman 2>/dev/null || command -v docker)
 ROOT_DIR=${PWD}
 HARDWARE=$(shell uname -m)
 GIT_SHA=$(shell git --no-pager describe --always --dirty)
@@ -14,6 +11,13 @@ VETARGS ?= -asmdecl -atomic -bool -buildtags -copylocks -methods -nilfunc -print
 PLATFORMS=darwin linux windows
 ARCHITECTURES=amd64
 
+## Docker config
+CONTAINER_TOOL=$(shell command -v podman 2>/dev/null || command -v docker)
+DOCKER_IMG_NAME ?= ${NAME}
+DOCKER_IMG_AUTHOR ?= louketo
+DOCKER_IMG_VERSION ?= ${VERSION}
+DOCKER_REGISTRY ?= docker.io
+DOCKER_IMG_TAG=$(subst //,/,${DOCKER_REGISTRY}/${DOCKER_IMG_AUTHOR}/${DOCKER_IMG_NAME}:${DOCKER_IMG_VERSION})
 
 default: build
 
@@ -49,19 +53,19 @@ docker-test:
 	${CONTAINER_TOOL} run --rm -ti -p 3000:3000 \
     -v ${ROOT_DIR}/config.yml:/etc/louketo/config.yml:ro \
     -v ${ROOT_DIR}/tests:/opt/tests:ro \
-    ${REGISTRY}/${AUTHOR}/${NAME}:${VERSION} --config /etc/louketo/config.yml
+    ${DOCKER_IMG_TAG} --config /etc/louketo/config.yml
 
 .PHONY: container-release docker-release
 container-release: docker-release
 docker-release: docker
 	@echo "--> Releasing the container image"
-	${CONTAINER_TOOL} push ${REGISTRY}/${AUTHOR}/${NAME}:${VERSION}
+	${CONTAINER_TOOL} push ${DOCKER_IMG_TAG}
 
 .PHONY: container docker
 container: docker
 docker:
 	@echo "--> Building the container image"
-	${CONTAINER_TOOL} build -t ${REGISTRY}/${AUTHOR}/${NAME}:${VERSION} .
+	${CONTAINER_TOOL} build ${DOCKER_BUILD_OPTIONS} -t ${DOCKER_IMG_TAG} .
 
 .PHONY: certs
 certs:
