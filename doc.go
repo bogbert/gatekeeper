@@ -58,6 +58,7 @@ const (
 	debugURL         = "/debug/pprof"
 
 	claimAudience       = "aud"
+	claimAudienceAlt    = "client_id"
 	claimPreferredName  = "preferred_username"
 	claimRealmAccess    = "realm_access"
 	claimResourceAccess = "resource_access"
