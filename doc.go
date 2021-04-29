@@ -63,7 +63,7 @@ const (
 	claimRealmAccess    = "realm_access"
 	claimResourceAccess = "resource_access"
 	claimResourceRoles  = "roles"
-	claimStringRoles    = "role"
+	claimStringRoles    = "custom:Role"
 	claimGroups         = "groups"
 
 	accessCookie       = "kc-access"
