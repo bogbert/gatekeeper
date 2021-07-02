@@ -2,7 +2,7 @@
 # Builder image
 #
 
-FROM golang:1.14.4 AS build-env
+FROM golang:1.14.15 AS build-env
 ARG SOURCE=*
 
 ADD $SOURCE /src/
@@ -19,7 +19,7 @@ RUN cp "$(find . -name 'louketo-proxy' -type f -print -quit)" /louketo-proxy
 # Actual image
 #
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.2
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 LABEL Name=louketo-proxy \
       Release=https://github.com/louketo/louketo-proxy \
@@ -27,6 +27,8 @@ LABEL Name=louketo-proxy \
       Help=https://github.com/louketo/louketo-proxy/issues
 
 WORKDIR "/opt/louketo"
+
+RUN microdnf update -y && microdnf clean all && rm -rf /var/cache/yum
 
 RUN echo "louketo:x:1000:louketo" >> /etc/group && \
     echo "louketo:x:1000:1000:louketo user:/opt/louketo:/sbin/nologin" >> /etc/passwd && \
