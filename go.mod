@@ -1,4 +1,4 @@
-module github.com/bogbert/louketo-proxy
+module github.com/bogbert/gatekeeper
 
 replace github.com/coreos/go-oidc => github.com/bogbert/go-oidc f6b3239917678f57704160cf14b95ea0807b25f8
 
