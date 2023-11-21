@@ -94,6 +94,7 @@ type custClaims struct {
 	RealmAccess    RealmRoles                `json:"realm_access"`
 	Groups         []string                  `json:"groups"`
 	ResourceAccess map[string]interface{}    `json:"resource_access"`
+	CognitoRoles   string                    `json:"role"`
 	FamilyName     string                    `json:"family_name"`
 	GivenName      string                    `json:"given_name"`
 	Username       string                    `json:"username"`
@@ -147,6 +148,16 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*UserContext, error) {
 
 			for _, r := range rolesVal {
 				roleList = append(roleList, fmt.Sprintf("%s:%s", name, r))
+			}
+		}
+	}
+
+	// @step: extract the client roles from a string containing comma separated values between square brackets (fallback solution added for Cognito)
+	if len(roleList) == 0 {
+		strRoles := customClaims.CognitoRoles
+		if strRoles != "" && strRoles[0] == '[' && strRoles[len(strRoles) - 1] == ']' {
+			for _, role := range strings.Split(strRoles[1:len(strRoles) - 1], ",") {
+				roleList = append(roleList, strings.TrimSpace(role))
 			}
 		}
 	}
