@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/testsuite"
@@ -275,6 +276,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
+			"--verbose=true",
 		}
 
 		fwdProxyArgs := []string{
@@ -327,11 +329,12 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 			Expect(strings.Contains(string(body), constant.UMAHeader)).To(BeTrue())
 
 			By("Accessing resource without access for user")
-			resp, err = rClient.R().Get(proxyAddress + umaForbiddenPath)
+			resp, err = rClient.SetTimeout(1 * time.Hour).R().Get(proxyAddress + umaForbiddenPath)
 			body = resp.Body()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 			Expect(strings.Contains(string(body), umaForbiddenPath)).To(BeFalse())
+			Expect(resp.Header().Get(constant.UMATicketHeader)).NotTo(BeEmpty())
 
 			By("Accessing not allowed method")
 			resp, err = rClient.R().Post(proxyAddress + umaMethodAllowedPath)
@@ -399,7 +402,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 		})
 	})
 
-	When("Accessing  not allowed resource", func() {
+	When("Accessing not allowed resource", func() {
 		It("should be forbidden", func(ctx context.Context) {
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{

@@ -109,3 +109,63 @@ func (p *KeycloakAuthorizationProvider) Authorize() (AuthzDecision, error) {
 
 	return AllowedAuthz, nil
 }
+
+func (p *KeycloakAuthorizationProvider) GenerateUMATicket() (string, error) {
+	resctx, cancel := context.WithTimeout(
+		context.Background(),
+		p.idpTimeout,
+	)
+
+	defer cancel()
+
+	matchingURI := true
+	resourceParam := gocloak.GetResourceParams{
+		URI:         &p.targetPath,
+		MatchingURI: &matchingURI,
+		Scope:       p.methodScope,
+	}
+
+	resources, err := p.idpClient.GetResourcesClient(
+		resctx,
+		p.pat,
+		p.realm,
+		resourceParam,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	if len(resources) == 0 {
+		return "", apperrors.ErrNoIDPResourceForPath
+	}
+
+	resourceID := resources[0].ID
+	resourceScopes := make([]string, 0)
+
+	if len(*resources[0].ResourceScopes) == 0 {
+		return "", apperrors.ErrMissingScopesForResource
+	}
+
+	for _, scope := range *resources[0].ResourceScopes {
+		resourceScopes = append(resourceScopes, *scope.Name)
+	}
+
+	permissions := []gocloak.CreatePermissionTicketParams{
+		{
+			ResourceID:     resourceID,
+			ResourceScopes: &resourceScopes,
+		},
+	}
+
+	permTicket, err := p.idpClient.CreatePermissionTicket(
+		resctx,
+		p.pat,
+		p.realm,
+		permissions,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return *permTicket.Ticket, nil
+}

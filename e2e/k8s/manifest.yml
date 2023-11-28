@@ -656,6 +656,21 @@ data:
                   }
                 ],
                 "icon_uri": ""
+              },
+              {
+                "name": "dog",
+                "ownerManagedAccess": true,
+                "attributes": {},
+                "_id": "d6d5cb9b-0aa7-4378-bc8c-edc28b3f93c7",
+                "uris": [
+                  "/dog"
+                ],
+                "scopes": [
+                  {
+                    "name": "method:GET"
+                  }
+                ],
+                "icon_uri": ""
               }
             ],
             "policies": [
@@ -682,6 +697,17 @@ data:
                 }
               },
               {
+                "id": "f9799cad-7362-4154-9d0d-2d50b2bc822c",
+                "name": "doggy",
+                "description": "",
+                "type": "user",
+                "logic": "NEGATIVE",
+                "decisionStrategy": "UNANIMOUS",
+                "config": {
+                  "users": "[\"myuser\"]"
+                }
+              },
+              {
                 "id": "9466b340-4a02-471d-8716-c6608a79ee33",
                 "name": "test",
                 "description": "",
@@ -703,6 +729,18 @@ data:
                 "config": {
                   "resources": "[\"turtle\"]",
                   "applyPolicies": "[\"forwclient\"]"
+                }
+              },
+              {
+                "id": "fbf10a23-2bef-4135-9796-b1b746561b30",
+                "name": "dog",
+                "description": "",
+                "type": "resource",
+                "logic": "POSITIVE",
+                "decisionStrategy": "UNANIMOUS",
+                "config": {
+                  "resources": "[\"dog\"]",
+                  "applyPolicies": "[\"doggy\"]"
                 }
               }
             ],

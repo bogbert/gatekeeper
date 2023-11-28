@@ -470,27 +470,22 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					scope.Logger.Info("trying to get new uma token")
 
 					umaUser, err = r.refreshUmaToken(req, authzPath, user, methodScope)
-					if err != nil {
-						scope.Logger.Error(err.Error())
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
-						return
-					}
-
-					umaToken := umaUser.RawToken
-					if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-						if umaToken, err = encryption.EncodeText(umaToken, r.Config.EncryptionKey); err != nil {
-							scope.Logger.Error(err.Error())
-							//nolint:contextcheck
-							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
-							return
+					if err == nil {
+						umaToken := umaUser.RawToken
+						if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
+							if umaToken, err = encryption.EncodeText(umaToken, r.Config.EncryptionKey); err != nil {
+								scope.Logger.Error(err.Error())
+								//nolint:contextcheck
+								next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+								return
+							}
 						}
-					}
 
-					r.Cm.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
-					wrt.Header().Set(constant.UMAHeader, umaToken)
-					scope.Logger.Debug("got uma token")
-					decision, err = authzFunc(authzPath, umaUser.Permissions)
+						r.Cm.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
+						wrt.Header().Set(constant.UMAHeader, umaToken)
+						scope.Logger.Debug("got uma token")
+						decision, err = authzFunc(authzPath, umaUser.Permissions)
+					}
 				}
 			} else if r.Config.EnableOpa {
 				provider = authorization.NewOpaAuthorizationProvider(
@@ -516,15 +511,35 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			default:
 				if err != nil {
 					scope.Logger.Error(apperrors.ErrFailedAuthzRequest.Error(), zap.Error(err))
-					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
-					return
 				}
 			}
 
 			scope.Logger.Info("authz decision", zap.String("decision", decision.String()))
 
 			if decision == authorization.DeniedAuthz {
+				if r.Config.EnableUma {
+					prv, ok := provider.(*authorization.KeycloakAuthorizationProvider)
+					if !ok {
+						scope.Logger.Error(apperrors.ErrAssertionFailed.Error())
+						//nolint:contextcheck
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
+
+					//nolint:contextcheck
+					ticket, err := prv.GenerateUMATicket()
+					if err != nil {
+						scope.Logger.Error(err.Error())
+					} else {
+						permHeader := fmt.Sprintf(
+							`realm="%s", as_uri="%s", ticket="%s"`,
+							r.Config.Realm,
+							r.Config.DiscoveryURI.Host,
+							ticket,
+						)
+						wrt.Header().Add(constant.UMATicketHeader, permHeader)
+					}
+				}
 				//nolint:contextcheck
 				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 				return

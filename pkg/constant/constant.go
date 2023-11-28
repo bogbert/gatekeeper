@@ -15,6 +15,7 @@ const (
 	EnvPrefix           = "PROXY_"
 	HeaderUpgrade       = "Upgrade"
 	VersionHeader       = "X-Auth-Proxy-Version"
+	UMATicketHeader     = "WWW-Authenticate"
 
 	AuthorizationURL = "/authorize"
 	CallbackURL      = "/callback"
