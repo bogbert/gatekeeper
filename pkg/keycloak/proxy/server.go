@@ -1179,7 +1179,6 @@ func NewOpenIDRoundTripper(rt http.RoundTripper) OpenIDRoundTripper {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-
 	return OpenIDRoundTripper{Header: make(http.Header), rt: rt}
 }
 

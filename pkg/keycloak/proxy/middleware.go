@@ -277,8 +277,8 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						zap.String("refresh token", refresh),
 					)
 
-					//nolint:contextcheck
-					_, newRawAccToken, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(conf, r.Config, refresh)
+					httpClient := r.IdpClient.RestyClient().GetClient()
+					_, newRawAccToken, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(ctx, conf, httpClient, refresh)
 					if err != nil {
 						switch err {
 						case apperrors.ErrRefreshTokenExpired:

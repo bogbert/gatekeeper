@@ -18,7 +18,6 @@ package proxy
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -188,15 +187,12 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	}
 
 	scope.Logger.Debug("callback handler")
-	//nolint:contextcheck
 	accessToken, identityToken, refreshToken, err := r.getCodeFlowTokens(scope, writer, req)
 	if err != nil {
 		return
 	}
 
 	rawAccessToken := accessToken
-
-	//nolint:contextcheck
 	stdClaims, customClaims, err := r.verifyOIDCTokens(scope, accessToken, identityToken, writer, req)
 	if err != nil {
 		return
@@ -316,7 +312,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 /*
 	loginHandler provide's a generic endpoint for clients to perform a user_credentials login to the provider
 */
-//nolint:cyclop,funlen // refactor
+//nolint:cyclop // refactor
 func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request) {
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 
@@ -328,19 +324,16 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 
 	code, err := func() (int, error) {
 		ctx, cancel := context.WithTimeout(
-			context.Background(),
+			req.Context(),
 			r.Config.OpenIDProviderTimeout,
 		)
-
-		if r.Config.SkipOpenIDProviderTLSVerify {
-			tr := &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
-			sslcli := &http.Client{Transport: tr}
-			ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
-		}
-
 		defer cancel()
+
+		ctx = context.WithValue(
+			ctx,
+			oauth2.HTTPClient,
+			r.IdpClient.RestyClient().GetClient(),
+		)
 
 		if !r.Config.EnableLoginHandler {
 			return http.StatusNotImplemented,
@@ -660,15 +653,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 
 	// step: do we have a revocation endpoint?
 	if revocationURL != "" {
-		client := &http.Client{
-			Timeout: r.Config.OpenIDProviderTimeout,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: r.Config.SkipOpenIDProviderTLSVerify,
-				},
-			},
-		}
-
+		client := r.IdpClient.RestyClient().GetClient()
 		// step: add the authentication headers
 		encodedID := url.QueryEscape(r.Config.ClientID)
 		encodedSecret := url.QueryEscape(r.Config.ClientSecret)

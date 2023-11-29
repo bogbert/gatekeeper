@@ -16,14 +16,11 @@ limitations under the License.
 package proxy
 
 import (
-	"crypto/tls"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
-	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
-	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/grokify/go-pkce"
 	"golang.org/x/net/context"
@@ -64,27 +61,16 @@ func newOAuth2Config(
 // NOTE: we may be able to extract the specific (non-standard) claim refresh_expires_in and refresh_expires
 // from response.RawBody.
 // When not available, keycloak provides us with the same (for now) expiry value for ID token.
-func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefreshToken string) (jwt.JSONWebToken, string, string, time.Time, time.Duration, error) {
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		proxyConfig.OpenIDProviderTimeout,
-	)
-
-	if proxyConfig.SkipOpenIDProviderTLSVerify {
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-
-		sslcli := &http.Client{Transport: tr}
-		ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
-	}
-
-	defer cancel()
-
+func getRefreshedToken(
+	ctx context.Context,
+	conf *oauth2.Config,
+	httpClient *http.Client,
+	oldRefreshToken string,
+) (jwt.JSONWebToken, string, string, time.Time, time.Duration, error) {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 	start := time.Now()
 
 	tkn, err := conf.TokenSource(ctx, &oauth2.Token{RefreshToken: oldRefreshToken}).Token()
-
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid_grant") {
 			return jwt.JSONWebToken{},
@@ -107,7 +93,6 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefre
 	metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 
 	token, err := jwt.ParseSigned(tkn.AccessToken)
-
 	if err != nil {
 		return jwt.JSONWebToken{},
 			"",
@@ -118,7 +103,6 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefre
 	}
 
 	refreshToken, err := jwt.ParseSigned(tkn.RefreshToken)
-
 	if err != nil {
 		return jwt.JSONWebToken{},
 			"",
@@ -129,9 +113,7 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefre
 	}
 
 	stdClaims := &jwt.Claims{}
-
 	err = token.UnsafeClaimsWithoutVerification(stdClaims)
-
 	if err != nil {
 		return jwt.JSONWebToken{},
 			"",
@@ -142,9 +124,7 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefre
 	}
 
 	refreshStdClaims := &jwt.Claims{}
-
 	err = refreshToken.UnsafeClaimsWithoutVerification(refreshStdClaims)
-
 	if err != nil {
 		return jwt.JSONWebToken{},
 			"",
@@ -166,72 +146,34 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefre
 
 // exchangeAuthenticationCode exchanges the authentication code with the oauth server for a access token
 func exchangeAuthenticationCode(
-	client *oauth2.Config,
-	code string,
-	codeVerifierCookie *http.Cookie,
-	skipOpenIDProviderTLSVerify bool,
-) (*oauth2.Token, error) {
-	return getToken(
-		client,
-		core.GrantTypeAuthCode,
-		code,
-		codeVerifierCookie,
-		skipOpenIDProviderTLSVerify,
-	)
-}
-
-// getToken retrieves a code from the provider
-func getToken(
+	ctx context.Context,
 	oConfig *oauth2.Config,
-	grantType,
 	code string,
 	codeVerifierCookie *http.Cookie,
-	skipOpenIDProviderTLSVerify bool,
+	httpClient *http.Client,
 ) (*oauth2.Token, error) {
-	ctx := context.Background()
-
-	if skipOpenIDProviderTLSVerify {
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-
-		sslcli := &http.Client{Transport: tr}
-		ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
-	} else {
-		ctx = context.Background()
-	}
-
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 	start := time.Now()
 	authCodeOptions := []oauth2.AuthCodeOption{}
 
-	if grantType == core.GrantTypeAuthCode {
-		if codeVerifierCookie != nil {
-			if codeVerifierCookie.Value == "" {
-				return nil, apperrors.ErrPKCECookieEmpty
-			}
-			authCodeOptions = append(
-				authCodeOptions,
-				oauth2.SetAuthURLParam(pkce.ParamCodeVerifier, codeVerifierCookie.Value),
-			)
+	if codeVerifierCookie != nil {
+		if codeVerifierCookie.Value == "" {
+			return nil, apperrors.ErrPKCECookieEmpty
 		}
+		authCodeOptions = append(
+			authCodeOptions,
+			oauth2.SetAuthURLParam(pkce.ParamCodeVerifier, codeVerifierCookie.Value),
+		)
 	}
 
 	token, err := oConfig.Exchange(ctx, code, authCodeOptions...)
-
 	if err != nil {
 		return token, err
 	}
 
 	taken := time.Since(start).Seconds()
-
-	switch grantType {
-	case core.GrantTypeAuthCode:
-		metrics.OauthTokensMetric.WithLabelValues("exchange").Inc()
-		metrics.OauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
-	case core.GrantTypeRefreshToken:
-		metrics.OauthTokensMetric.WithLabelValues("renew").Inc()
-		metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
-	}
+	metrics.OauthTokensMetric.WithLabelValues("exchange").Inc()
+	metrics.OauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
 
 	return token, err
 }

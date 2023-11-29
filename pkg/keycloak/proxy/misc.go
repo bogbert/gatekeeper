@@ -400,7 +400,6 @@ func (r *OauthProxy) getRPT(
 		req.Context(),
 		r.Config.OpenIDProviderTimeout,
 	)
-
 	defer cancel()
 
 	matchingURI := true
@@ -527,10 +526,11 @@ func (r *OauthProxy) getCodeFlowTokens(
 	}
 
 	resp, err := exchangeAuthenticationCode(
+		req.Context(),
 		conf,
 		code,
 		codeVerifier,
-		r.Config.SkipOpenIDProviderTLSVerify,
+		r.IdpClient.RestyClient().GetClient(),
 	)
 	if err != nil {
 		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
@@ -594,10 +594,9 @@ func (r *OauthProxy) verifyOIDCTokens(
 	verifier := r.Provider.Verifier(&oidc3.Config{ClientID: r.Config.ClientID})
 
 	ctx, cancel := context.WithTimeout(
-		context.Background(),
+		req.Context(),
 		r.Config.OpenIDProviderTimeout,
 	)
-
 	defer cancel()
 
 	idToken, err = verifier.Verify(ctx, rawIDToken)
