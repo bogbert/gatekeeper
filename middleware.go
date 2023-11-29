@@ -506,6 +506,8 @@ func (r *oauthProxy) identityHeadersMiddleware(custom []string) func(http.Handle
 				for claim, header := range customClaims {
 					if claim, found := user.claims[claim]; found {
 						req.Header.Set(header, fmt.Sprintf("%v", claim))
+					} else {
+						req.Header.Set(header, "")
 					}
 				}
 			}
