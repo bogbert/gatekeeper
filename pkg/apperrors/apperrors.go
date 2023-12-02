@@ -61,8 +61,11 @@ var (
 	ErrParseAccessTokenClaims         = errors.New("faled to parse access token claims")
 	ErrParseRefreshTokenClaims        = errors.New("faled to parse refresh token claims")
 
-	ErrVerifyIDToken     = errors.New("unable to verify the ID token")
-	ErrVerifyAccessToken = errors.New("unable to verify the access token")
+	ErrTokenSignature          = errors.New("invalid token signature")
+	ErrVerifyIDToken           = errors.New("unable to verify ID token")
+	ErrVerifyAccessToken       = errors.New("unable to verify access token")
+	ErrVerifyRefreshToken      = errors.New("refresh token failed verification")
+	ErrAccRefreshTokenMismatch = errors.New("seems that access token and refresh token doesn't match")
 
 	ErrCreateRevocationReq   = errors.New("unable to construct the revocation request")
 	ErrRevocationReqFailure  = errors.New("request to revocation endpoint failed")
@@ -76,13 +79,14 @@ var (
 
 	// config errors
 
-	ErrInvalidPostLoginRedirectPath            = errors.New("post login redirect path invalid, should be only path not absolute url (no hostname, scheme)")
-	ErrPostLoginRedirectPathNoRedirectsInvalid = errors.New("post login redirect path can be enabled only with no-redirect=false")
-	ErrMissingListenInterface                  = errors.New("you have not specified the listening interface")
-	ErrAdminListenerScheme                     = errors.New("scheme for admin listener must be one of [http, https]")
-	ErrInvalidIdpProviderProxyURI              = errors.New("invalid proxy address for IDP provider proxy")
-	ErrInvalidMaxIdleConnections               = errors.New("max-idle-connections must be a number > 0")
-	ErrInvalidMaxIdleConnsPerHost              = errors.New(
+	ErrNoRedirectsWithEnableRefreshTokensInvalid = errors.New("no-redirects true cannot be enabled with refresh tokens")
+	ErrInvalidPostLoginRedirectPath              = errors.New("post login redirect path invalid, should be only path not absolute url (no hostname, scheme)")
+	ErrPostLoginRedirectPathNoRedirectsInvalid   = errors.New("post login redirect path can be enabled only with no-redirect=false")
+	ErrMissingListenInterface                    = errors.New("you have not specified the listening interface")
+	ErrAdminListenerScheme                       = errors.New("scheme for admin listener must be one of [http, https]")
+	ErrInvalidIdpProviderProxyURI                = errors.New("invalid proxy address for IDP provider proxy")
+	ErrInvalidMaxIdleConnections                 = errors.New("max-idle-connections must be a number > 0")
+	ErrInvalidMaxIdleConnsPerHost                = errors.New(
 		"maxi-idle-connections-per-host must be a " +
 			"number > 0 and <= max-idle-connections",
 	)

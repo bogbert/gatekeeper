@@ -565,11 +565,23 @@ func (f *fakeProxy) performUserLogin(reqCfg *fakeRequest) error {
 func setRequestAuthentication(cfg *config.Config, client *resty.Client, request *resty.Request, c *fakeRequest, token string) {
 	switch c.HasCookieToken {
 	case true:
-		client.SetCookie(&http.Cookie{
-			Name:  cfg.CookieAccessName,
-			Path:  "/",
-			Value: token,
-		})
+		cookies := client.Cookies
+		present := false
+		for _, cook := range cookies {
+			if cook.Name == cfg.CookieAccessName {
+				present = true
+				cook.Value = token
+				cook.Path = "/"
+				break
+			}
+		}
+		if !present {
+			client.SetCookie(&http.Cookie{
+				Name:  cfg.CookieAccessName,
+				Path:  "/",
+				Value: token,
+			})
+		}
 	default:
 		request.SetAuthToken(token)
 	}

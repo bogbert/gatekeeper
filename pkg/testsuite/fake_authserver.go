@@ -114,7 +114,6 @@ func (t *fakeToken) getToken() (string, error) {
 
 	var priv interface{}
 	priv, err0 := x509.ParsePKCS8PrivateKey(input)
-
 	if err0 != nil {
 		return "", err0
 	}
@@ -122,14 +121,12 @@ func (t *fakeToken) getToken() (string, error) {
 	alg := jose2.SignatureAlgorithm("RS256")
 	privKey := &jose2.JSONWebKey{Key: priv, Algorithm: string(alg), KeyID: "test-kid"}
 	signer, err := jose2.NewSigner(jose2.SigningKey{Algorithm: alg, Key: privKey}, nil)
-
 	if err != nil {
 		return "", err
 	}
 
 	b := jwt.Signed(signer).Claims(&t.claims)
 	jwt, err := b.CompactSerialize()
-
 	if err != nil {
 		return "", err
 	}
@@ -137,7 +134,7 @@ func (t *fakeToken) getToken() (string, error) {
 	return jwt, nil
 }
 
-// getUnsignedToken returns a unsigned JWT token from the clains
+// getUnsignedToken returns a unsigned JWT token from the claims
 func (t *fakeToken) getUnsignedToken() (string, error) {
 	input := []byte("")
 	block, _ := pem.Decode([]byte(fakePrivateKey))
@@ -168,7 +165,7 @@ func (t *fakeToken) getUnsignedToken() (string, error) {
 	}
 
 	items := strings.Split(jwt, ".")
-	jwt = strings.Join(items[0:1], ".")
+	jwt = strings.Join(items[0:2], ".")
 
 	return jwt, nil
 }
@@ -497,6 +494,11 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 	user, err := proxy.ExtractIdentity(token)
 
 	if err != nil {
+		wrt.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if user.IsExpired() {
 		wrt.WriteHeader(http.StatusUnauthorized)
 		return
 	}

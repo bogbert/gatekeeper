@@ -18,6 +18,7 @@ package proxy
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -581,121 +582,84 @@ func (r *OauthProxy) verifyUmaToken(
 	return nil
 }
 
-func (r *OauthProxy) verifyOIDCTokens(
-	scope *RequestScope,
+func verifyOIDCTokens(
+	ctx context.Context,
+	provider *oidc3.Provider,
+	clientID string,
 	rawAccessToken string,
 	rawIDToken string,
-	writer http.ResponseWriter,
-	req *http.Request,
-) (*jwt.Claims, *custClaims, error) {
-	var idToken *oidc3.IDToken
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+) (*oidc3.IDToken, *oidc3.IDToken, error) {
+	var oIDToken *oidc3.IDToken
+	var oAccToken *oidc3.IDToken
 	var err error
 
-	verifier := r.Provider.Verifier(&oidc3.Config{ClientID: r.Config.ClientID})
-
-	ctx, cancel := context.WithTimeout(
-		req.Context(),
-		r.Config.OpenIDProviderTimeout,
-	)
-	defer cancel()
-
-	idToken, err = verifier.Verify(ctx, rawIDToken)
+	oIDToken, err = verifyToken(ctx, provider, rawIDToken, clientID, false, false)
 	if err != nil {
-		scope.Logger.Error(apperrors.ErrVerifyIDToken.Error(), zap.Error(err))
-		r.accessForbidden(writer, req)
-		return nil, nil, err
-	}
-
-	token, err := jwt.ParseSigned(rawIDToken)
-	if err != nil {
-		scope.Logger.Error(apperrors.ErrParseIDToken.Error(), zap.Error(err))
-		r.accessForbidden(writer, req)
-		return nil, nil, err
-	}
-
-	stdClaims := &jwt.Claims{}
-	customClaims := &custClaims{}
-
-	err = token.UnsafeClaimsWithoutVerification(stdClaims, customClaims)
-	if err != nil {
-		scope.Logger.Error(apperrors.ErrParseIDTokenClaims.Error(), zap.Error(err))
-		r.accessForbidden(writer, req)
-		return nil, nil, err
+		return nil, nil, errors.Join(apperrors.ErrVerifyIDToken, err)
 	}
 
 	// check https://openid.net/specs/openid-connect-core-1_0.html#ImplicitIDToken - at_hash
 	// keycloak seems doesnt support yet at_hash
 	// https://stackoverflow.com/questions/60818373/configure-keycloak-to-include-an-at-hash-claim-in-the-id-token
-	if idToken.AccessTokenHash != "" {
-		err = idToken.VerifyAccessToken(rawAccessToken)
-
+	if oIDToken.AccessTokenHash != "" {
+		err = oIDToken.VerifyAccessToken(rawAccessToken)
 		if err != nil {
-			scope.Logger.Error(apperrors.ErrVerifyAccessToken.Error(), zap.Error(err))
-			r.accessForbidden(writer, req)
-			return nil, nil, err
+			return nil, nil, errors.Join(apperrors.ErrVerifyAccessToken, err)
 		}
 	}
 
-	accToken, err := jwt.ParseSigned(rawAccessToken)
+	oAccToken, err = verifyToken(
+		ctx,
+		provider,
+		rawAccessToken,
+		clientID,
+		skipClientIDCheck,
+		skipIssuerCheck,
+	)
 	if err != nil {
-		scope.Logger.Error(apperrors.ErrParseAccessToken.Error())
-		r.accessForbidden(writer, req)
-		return nil, nil, err
+		return nil, nil, errors.Join(apperrors.ErrVerifyAccessToken, err)
 	}
 
-	token = accToken
-	stdClaims = &jwt.Claims{}
-	customClaims = &custClaims{}
-
-	err = token.UnsafeClaimsWithoutVerification(stdClaims, customClaims)
-	if err != nil {
-		scope.Logger.Error(apperrors.ErrParseAccessTokenClaims.Error(), zap.Error(err))
-		r.accessForbidden(writer, req)
-		return nil, nil, err
-	}
-
-	scope.Logger.Debug(
-		"issuing access token for user",
-		zap.String("access token", rawAccessToken),
-		zap.String("email", customClaims.Email),
-		zap.String("sub", stdClaims.Subject),
-		zap.String("expires", stdClaims.Expiry.Time().Format(time.RFC3339)),
-		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()),
-	)
-
-	scope.Logger.Info(
-		"issuing access token for user",
-		zap.String("email", customClaims.Email),
-		zap.String("sub", stdClaims.Subject),
-		zap.String("expires", stdClaims.Expiry.Time().Format(time.RFC3339)),
-		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()),
-	)
-
-	return stdClaims, customClaims, nil
+	return oAccToken, oIDToken, nil
 }
 
-func (r *OauthProxy) verifyRefreshToken(
-	scope *RequestScope,
-	rawRefreshToken string,
-	writer http.ResponseWriter,
-	req *http.Request,
-) (*jwt.Claims, error) {
-	refreshToken, err := jwt.ParseSigned(rawRefreshToken)
+func verifyToken(
+	ctx context.Context,
+	provider *oidc3.Provider,
+	rawToken string,
+	clientID string,
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+) (*oidc3.IDToken, error) {
+	// This verifier with this configuration checks only signatures
+	// we want to know if we are using valid token
+	// bad is that Verify method doesn't check first signatures, so
+	// we have to do it like this
+	oidcConf := &oidc3.Config{
+		ClientID:          clientID,
+		SkipClientIDCheck: skipClientIDCheck,
+		SkipIssuerCheck:   skipIssuerCheck,
+		SkipExpiryCheck:   true,
+	}
+
+	verifier := provider.Verifier(oidcConf)
+	_, err := verifier.Verify(ctx, rawToken)
 	if err != nil {
-		scope.Logger.Error(apperrors.ErrParseRefreshToken.Error(), zap.Error(err))
-		writer.WriteHeader(http.StatusInternalServerError)
+		return nil, errors.Join(apperrors.ErrTokenSignature, err)
+	}
+
+	// Now doing expiration check
+	oidcConf.SkipExpiryCheck = false
+	verifier = provider.Verifier(oidcConf)
+
+	oToken, err := verifier.Verify(ctx, rawToken)
+	if err != nil {
 		return nil, err
 	}
 
-	stdRefreshClaims := &jwt.Claims{}
-	err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
-	if err != nil {
-		scope.Logger.Error(apperrors.ErrParseRefreshTokenClaims.Error(), zap.Error(err))
-		r.accessForbidden(writer, req)
-		return nil, err
-	}
-
-	return stdRefreshClaims, nil
+	return oToken, nil
 }
 
 func (r *OauthProxy) encryptToken(

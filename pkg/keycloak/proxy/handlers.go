@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -193,25 +194,60 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	}
 
 	rawAccessToken := accessToken
-	stdClaims, customClaims, err := r.verifyOIDCTokens(scope, accessToken, identityToken, writer, req)
+	oAccToken, _, err := verifyOIDCTokens(
+		req.Context(),
+		r.Provider,
+		r.Config.ClientID,
+		accessToken,
+		identityToken,
+		r.Config.SkipAccessTokenClientIDCheck,
+		r.Config.SkipAccessTokenIssuerCheck,
+	)
 	if err != nil {
+		scope.Logger.Error(err.Error())
+		r.accessForbidden(writer, req)
 		return
 	}
+
+	scope.Logger.Debug(
+		"issuing access token for user",
+		zap.String("access token", rawAccessToken),
+		zap.String("sub", oAccToken.Subject),
+		zap.String("expires", oAccToken.Expiry.Format(time.RFC3339)),
+		zap.String("duration", time.Until(oAccToken.Expiry).String()),
+	)
+
+	scope.Logger.Info(
+		"issuing access token for user",
+		zap.String("sub", oAccToken.Subject),
+		zap.String("expires", oAccToken.Expiry.Format(time.RFC3339)),
+		zap.String("duration", time.Until(oAccToken.Expiry).String()),
+	)
 
 	// @metric a token has been issued
 	metrics.OauthTokensMetric.WithLabelValues("issued").Inc()
 
-	oidcTokensCookiesExp := time.Until(stdClaims.Expiry.Time())
+	oidcTokensCookiesExp := time.Until(oAccToken.Expiry)
 	// step: does the response have a refresh token and we do NOT ignore refresh tokens?
 	if r.Config.EnableRefreshTokens && refreshToken != "" {
 		var encrypted string
-		var stdRefreshClaims *jwt.Claims
-		stdRefreshClaims, err = r.verifyRefreshToken(scope, refreshToken, writer, req)
+		var oRefresh *oidc3.IDToken
+		oRefresh, err = verifyToken(
+			req.Context(),
+			r.Provider,
+			refreshToken,
+			r.Config.ClientID,
+			r.Config.SkipAccessTokenClientIDCheck,
+			r.Config.SkipAccessTokenIssuerCheck,
+		)
+
 		if err != nil {
+			scope.Logger.Error(apperrors.ErrVerifyRefreshToken.Error(), zap.Error(err))
+			r.accessForbidden(writer, req)
 			return
 		}
 
-		oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
+		oidcTokensCookiesExp = time.Until(oRefresh.Expiry)
 		encrypted, err = r.encryptToken(scope, refreshToken, r.Config.EncryptionKey, "refresh", writer)
 		if err != nil {
 			return
@@ -223,8 +259,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 				scope.Logger.Error(
 					apperrors.ErrSaveTokToStore.Error(),
 					zap.Error(err),
-					zap.String("sub", stdClaims.Subject),
-					zap.String("email", customClaims.Email),
+					zap.String("sub", oAccToken.Subject),
 				)
 				r.accessForbidden(writer, req)
 				return

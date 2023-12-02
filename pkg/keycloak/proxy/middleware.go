@@ -17,6 +17,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -32,7 +33,6 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/PuerkitoBio/purell"
-	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/unrolled/secure"
@@ -219,17 +219,25 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					return
 				}
 			} else { //nolint:gocritic
-				verifier := r.Provider.Verifier(
-					&oidc3.Config{
-						ClientID:          r.Config.ClientID,
-						SkipClientIDCheck: r.Config.SkipAccessTokenClientIDCheck,
-						SkipIssuerCheck:   r.Config.SkipAccessTokenIssuerCheck,
-					},
+				_, err := verifyToken(
+					ctx,
+					r.Provider,
+					user.RawToken,
+					r.Config.ClientID,
+					r.Config.SkipAccessTokenClientIDCheck,
+					r.Config.SkipAccessTokenIssuerCheck,
 				)
-
-				//nolint:contextcheck
-				_, err := verifier.Verify(context.Background(), user.RawToken)
 				if err != nil {
+					if errors.Is(err, apperrors.ErrTokenSignature) {
+						lLog.Error(
+							apperrors.ErrAccTokenVerifyFailure.Error(),
+							zap.Error(err),
+						)
+						//nolint:contextcheck
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
+
 					if !strings.Contains(err.Error(), "token is expired") {
 						lLog.Error(
 							apperrors.ErrAccTokenVerifyFailure.Error(),
@@ -261,6 +269,33 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						return
 					}
 
+					oRefresh, err := verifyToken(
+						ctx,
+						r.Provider,
+						refresh,
+						r.Config.ClientID,
+						r.Config.SkipAccessTokenClientIDCheck,
+						r.Config.SkipAccessTokenIssuerCheck,
+					)
+					if err != nil {
+						lLog.Error(
+							apperrors.ErrVerifyRefreshToken.Error(),
+							zap.Error(err),
+						)
+						//nolint:contextcheck
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
+					if user.ID != oRefresh.Subject {
+						lLog.Error(
+							apperrors.ErrAccRefreshTokenMismatch.Error(),
+							zap.Error(err),
+						)
+						//nolint:contextcheck
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
+
 					// attempt to refresh the access token, possibly with a renewed refresh token
 					//
 					// NOTE: atm, this does not retrieve explicit refresh token expiry from oauth2,
@@ -278,7 +313,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					)
 
 					httpClient := r.IdpClient.RestyClient().GetClient()
-					_, newRawAccToken, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(ctx, conf, httpClient, refresh)
+					newAccToken, newRawAccToken, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(ctx, conf, httpClient, refresh)
 					if err != nil {
 						switch err {
 						case apperrors.ErrRefreshTokenExpired:
@@ -331,7 +366,8 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 								apperrors.ErrEncryptAccToken.Error(),
 								zap.Error(err),
 							)
-							wrt.WriteHeader(http.StatusInternalServerError)
+							//nolint:contextcheck
+							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 							return
 						}
 					}
@@ -339,14 +375,23 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					// step: inject the refreshed access token
 					r.Cm.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
 
+					// update the with the new access token and inject into the context
+					newUser, err := ExtractIdentity(&newAccToken)
+					if err != nil {
+						lLog.Error(err.Error())
+						//nolint:contextcheck
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
+
 					// step: inject the renewed refresh token
 					if newRefreshToken != "" {
 						lLog.Debug(
 							"renew refresh cookie with new refresh token",
 							zap.Duration("refresh_expires_in", refreshExpiresIn),
 						)
-
-						encryptedRefreshToken, err := encryption.EncodeText(newRefreshToken, r.Config.EncryptionKey)
+						var encryptedRefreshToken string
+						encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, r.Config.EncryptionKey)
 						if err != nil {
 							lLog.Error(
 								apperrors.ErrEncryptRefreshToken.Error(),
@@ -358,14 +403,14 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 						if r.useStore() {
 							go func(old, newToken string, encrypted string) {
-								if err := r.DeleteRefreshToken(req.Context(), old); err != nil {
+								if err = r.DeleteRefreshToken(req.Context(), old); err != nil {
 									lLog.Error(
 										apperrors.ErrDelTokFromStore.Error(),
 										zap.Error(err),
 									)
 								}
 
-								if err := r.StoreRefreshToken(req.Context(), newToken, encrypted, refreshExpiresIn); err != nil {
+								if err = r.StoreRefreshToken(req.Context(), newToken, encrypted, refreshExpiresIn); err != nil {
 									lLog.Error(
 										apperrors.ErrSaveTokToStore.Error(),
 										zap.Error(err),
@@ -378,8 +423,10 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						}
 					}
 
-					// update the with the new access token and inject into the context
-					user.RawToken = newRawAccToken
+					// IMPORTANT: on this rely other middlewares, must be refreshed
+					// with new identity!
+					newUser.RawToken = newRawAccToken
+					scope.Identity = newUser
 					ctx = context.WithValue(req.Context(), constant.ContextScopeName, scope)
 				}
 			}

@@ -62,7 +62,7 @@ weight: 2
 |    --localhost-metrics                     | enforces the metrics page can only been requested from 127.0.0.1 | false | PROXY_LOCALHOST_METRICS
 |    --enable-compression                    | enable gzip compression for response | false | PROXY_ENABLE_COMPRESSION
 |    --enable-pkce                           | enable pkce for auth code flow, only S256 code challenge supported | false | PROXY_ENABLE_PKCE
-|    --enable-idp-session-check              | during token validation it also checks if user session is still present, useful for multi app logout | false | PROXY_ENABLE_IDP_SESSION_CHECK
+|    --enable-idp-session-check              | during token validation it also checks if user session is still present, useful for multi app logout | true | PROXY_ENABLE_IDP_SESSION_CHECK
 |    --enable-uma                            | enable UMA authorization, please don't use in production as it is new feature, we would like to receive feedback first             | false | PROXY_ENABLE_UMA
 |	 --enable-opa                            | enable authorization with external Open policy agent  | false | PROXY_ENABLE_OPA
 |	 --opa-timeout                           | timeout for connection to OPA                         |   10s | PROXY_OPA_TIMEOUT

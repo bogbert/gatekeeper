@@ -341,6 +341,7 @@ func NewDefaultConfig() *Config {
 		EnableDefaultDeny:             true,
 		EnableSessionCookies:          true,
 		EnableTokenHeader:             true,
+		EnableIDPSessionCheck:         true,
 		HTTPOnlyCookie:                true,
 		Headers:                       make(map[string]string),
 		LetsEncryptCacheDir:           "./cache/",

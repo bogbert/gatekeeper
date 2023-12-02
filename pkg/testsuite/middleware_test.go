@@ -1417,7 +1417,7 @@ func TestRefreshToken(t *testing.T) {
 					Redirects:     false,
 					HasLogin:      false,
 					ExpectedProxy: false,
-					ExpectedCode:  http.StatusUnauthorized,
+					ExpectedCode:  http.StatusForbidden,
 				},
 			},
 		},
@@ -2616,6 +2616,112 @@ func TestEnableOpa(t *testing.T) {
 
 				cfg.OpaAuthzURL = authzURL
 
+				p := newFakeProxy(cfg, &fakeAuthConfig{})
+				p.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
+}
+
+func TestAuthenticationMiddleware(t *testing.T) {
+	// proxy := newFakeProxy(nil, &fakeAuthConfig{})
+	// token := newTestToken(proxy.idp.getLocation())
+	tok := newTestToken("example")
+	tok.setExpiration(time.Now().Add(-5 * time.Minute))
+	unsignedToken, err := tok.getUnsignedToken()
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	badlySignedToken := unsignedToken + ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	cfg := newFakeKeycloakConfig()
+
+	requests := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
+		{
+			Name: "TestForgedExpiredTokenWithIdpSessionCheckDisabled",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableIDPSessionCheck = false
+				conf.EnableRefreshTokens = true
+				conf.EncryptionKey = testEncryptionKey
+				conf.ClientID = ValidUsername
+				conf.ClientSecret = ValidPassword
+				conf.NoRedirects = false
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:               FakeAuthAllURL,
+					HasLogin:          true,
+					Redirects:         true,
+					SkipClientIDCheck: true,
+					SkipIssuerCheck:   true,
+					OnResponse: func(int, *resty.Request, *resty.Response) {
+						<-time.After(time.Duration(int64(2500)) * time.Millisecond)
+					},
+					ExpectedProxy:                 true,
+					ExpectedCode:                  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: nil},
+				},
+				{
+					URI:               FakeAuthAllURL,
+					Redirects:         true,
+					SkipClientIDCheck: true,
+					SkipIssuerCheck:   true,
+					HasLogin:          false,
+					RawToken:          badlySignedToken,
+					HasCookieToken:    true,
+					ExpectedProxy:     false,
+					ExpectedCode:      http.StatusForbidden,
+				},
+			},
+		},
+		{
+			Name: "TestForgedExpiredTokenWithIdpSessionCheckEnabled",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableIDPSessionCheck = true
+				conf.EnableRefreshTokens = true
+				conf.EncryptionKey = testEncryptionKey
+				conf.ClientID = ValidUsername
+				conf.ClientSecret = ValidPassword
+				conf.NoRedirects = false
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:       FakeAuthAllURL,
+					HasLogin:  true,
+					Redirects: true,
+					OnResponse: func(int, *resty.Request, *resty.Response) {
+						<-time.After(time.Duration(int64(2500)) * time.Millisecond)
+					},
+					ExpectedProxy:                 true,
+					ExpectedCode:                  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: nil},
+				},
+				{
+					URI:               FakeAuthAllURL,
+					Redirects:         true,
+					SkipClientIDCheck: true,
+					SkipIssuerCheck:   true,
+					HasLogin:          false,
+					RawToken:          badlySignedToken,
+					HasCookieToken:    true,
+					ExpectedProxy:     false,
+					ExpectedCode:      http.StatusSeeOther,
+				},
+			},
+		},
+	}
+
+	for _, testCase := range requests {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				cfg := newFakeKeycloakConfig()
+				testCase.ProxySettings(cfg)
 				p := newFakeProxy(cfg, &fakeAuthConfig{})
 				p.RunTests(t, testCase.ExecutionSettings)
 			},
