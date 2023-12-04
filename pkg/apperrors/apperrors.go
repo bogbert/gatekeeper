@@ -36,7 +36,6 @@ var (
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
 
 	ErrSessionExpiredVerifyOff  = errors.New("the session has expired and verification switch off")
-	ErrAccTokenVerifyFailure    = errors.New("access token failed verification")
 	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")
 	ErrRefreshTokenNotFound     = errors.New("unable to find refresh token for user")
 	ErrAccTokenRefreshFailure   = errors.New("failed to refresh the access token")
@@ -61,9 +60,9 @@ var (
 	ErrParseAccessTokenClaims         = errors.New("faled to parse access token claims")
 	ErrParseRefreshTokenClaims        = errors.New("faled to parse refresh token claims")
 
+	ErrAccTokenVerifyFailure   = errors.New("access token failed verification")
 	ErrTokenSignature          = errors.New("invalid token signature")
 	ErrVerifyIDToken           = errors.New("unable to verify ID token")
-	ErrVerifyAccessToken       = errors.New("unable to verify access token")
 	ErrVerifyRefreshToken      = errors.New("refresh token failed verification")
 	ErrAccRefreshTokenMismatch = errors.New("seems that access token and refresh token doesn't match")
 

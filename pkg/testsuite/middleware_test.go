@@ -1365,12 +1365,42 @@ func TestRefreshToken(t *testing.T) {
 	}{
 		{
 			Name: "TestRefreshTokenEncryption",
-			ProxySettings: func(c *config.Config) {
-				c.EnableRefreshTokens = true
-				c.EnableEncryptedToken = true
-				c.Verbose = true
-				c.EnableLogging = true
-				c.EncryptionKey = testEncryptionKey
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableRefreshTokens = true
+				conf.EnableEncryptedToken = true
+				conf.Verbose = true
+				conf.EnableLogging = true
+				conf.EncryptionKey = testEncryptionKey
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:                           FakeAuthAllURL,
+					HasLogin:                      true,
+					Redirects:                     true,
+					OnResponse:                    delay,
+					ExpectedProxy:                 true,
+					ExpectedCode:                  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieRefreshName: checkRefreshTokenEncryption},
+				},
+				{
+					URI:           FakeAuthAllURL,
+					Redirects:     false,
+					HasLogin:      false,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+				},
+			},
+		},
+		{
+			Name: "TestRefreshTokenEncryptionWithClientIDAndIssuerCheckOn",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableRefreshTokens = true
+				conf.EnableEncryptedToken = true
+				conf.Verbose = true
+				conf.EnableLogging = true
+				conf.EncryptionKey = testEncryptionKey
+				conf.SkipAccessTokenClientIDCheck = false
+				conf.SkipAccessTokenIssuerCheck = false
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1393,12 +1423,12 @@ func TestRefreshToken(t *testing.T) {
 		},
 		{
 			Name: "TestRefreshTokenExpiration",
-			ProxySettings: func(c *config.Config) {
-				c.EnableRefreshTokens = true
-				c.EnableEncryptedToken = true
-				c.Verbose = true
-				c.EnableLogging = true
-				c.EncryptionKey = testEncryptionKey
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableRefreshTokens = true
+				conf.EnableEncryptedToken = true
+				conf.Verbose = true
+				conf.EnableLogging = true
+				conf.EncryptionKey = testEncryptionKey
 			},
 			ExecutionSettings: []fakeRequest{
 				{

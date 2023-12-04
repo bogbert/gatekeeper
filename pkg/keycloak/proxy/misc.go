@@ -606,7 +606,7 @@ func verifyOIDCTokens(
 	if oIDToken.AccessTokenHash != "" {
 		err = oIDToken.VerifyAccessToken(rawAccessToken)
 		if err != nil {
-			return nil, nil, errors.Join(apperrors.ErrVerifyAccessToken, err)
+			return nil, nil, errors.Join(apperrors.ErrAccTokenVerifyFailure, err)
 		}
 	}
 
@@ -619,7 +619,7 @@ func verifyOIDCTokens(
 		skipIssuerCheck,
 	)
 	if err != nil {
-		return nil, nil, errors.Join(apperrors.ErrVerifyAccessToken, err)
+		return nil, nil, errors.Join(apperrors.ErrAccTokenVerifyFailure, err)
 	}
 
 	return oAccToken, oIDToken, nil
