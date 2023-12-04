@@ -274,8 +274,8 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						r.Provider,
 						refresh,
 						r.Config.ClientID,
-						r.Config.SkipAccessTokenClientIDCheck,
-						r.Config.SkipAccessTokenIssuerCheck,
+						true,
+						true,
 					)
 					if err != nil {
 						lLog.Error(

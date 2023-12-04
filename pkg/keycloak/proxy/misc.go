@@ -637,22 +637,28 @@ func verifyToken(
 	// we want to know if we are using valid token
 	// bad is that Verify method doesn't check first signatures, so
 	// we have to do it like this
-	oidcConf := &oidc3.Config{
-		ClientID:          clientID,
-		SkipClientIDCheck: skipClientIDCheck,
-		SkipIssuerCheck:   skipIssuerCheck,
-		SkipExpiryCheck:   true,
-	}
-
-	verifier := provider.Verifier(oidcConf)
+	verifier := provider.Verifier(
+		&oidc3.Config{
+			ClientID:          clientID,
+			SkipClientIDCheck: true,
+			SkipIssuerCheck:   true,
+			SkipExpiryCheck:   true,
+		},
+	)
 	_, err := verifier.Verify(ctx, rawToken)
 	if err != nil {
 		return nil, errors.Join(apperrors.ErrTokenSignature, err)
 	}
 
 	// Now doing expiration check
-	oidcConf.SkipExpiryCheck = false
-	verifier = provider.Verifier(oidcConf)
+	verifier = provider.Verifier(
+		&oidc3.Config{
+			ClientID:          clientID,
+			SkipClientIDCheck: skipClientIDCheck,
+			SkipIssuerCheck:   skipIssuerCheck,
+			SkipExpiryCheck:   false,
+		},
+	)
 
 	oToken, err := verifier.Verify(ctx, rawToken)
 	if err != nil {

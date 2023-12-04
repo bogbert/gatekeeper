@@ -237,8 +237,8 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 			r.Provider,
 			refreshToken,
 			r.Config.ClientID,
-			r.Config.SkipAccessTokenClientIDCheck,
-			r.Config.SkipAccessTokenIssuerCheck,
+			true,
+			true,
 		)
 
 		if err != nil {
