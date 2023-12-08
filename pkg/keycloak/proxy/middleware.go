@@ -193,11 +193,19 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 				zap.String("expired_on", user.ExpiresAt.String()),
 			)
 
+			// IMPORTANT: For all calls with go-oidc library be aware
+			// that calls accept context parameter and you have to pass
+			// client from provider through this parameter, although
+			// provider is already configured with client!!!
+			// https://github.com/coreos/go-oidc/issues/402
+			httpClient := r.IdpClient.RestyClient().GetClient()
+			oidcLibCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
 			if r.Config.EnableIDPSessionCheck {
 				tokenSource := oauth2.StaticTokenSource(
 					&oauth2.Token{AccessToken: user.RawToken},
 				)
-				_, err := r.Provider.UserInfo(ctx, tokenSource)
+				_, err := r.Provider.UserInfo(oidcLibCtx, tokenSource)
 				if err != nil {
 					scope.Logger.Error(err.Error())
 					//nolint:contextcheck
@@ -307,7 +315,6 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						zap.String("refresh token", refresh),
 					)
 
-					httpClient := r.IdpClient.RestyClient().GetClient()
 					newAccToken, newRawAccToken, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(ctx, conf, httpClient, refresh)
 					if err != nil {
 						switch err {
