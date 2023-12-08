@@ -36,6 +36,8 @@ import (
 func NewOauthProxyApp() *cli.App {
 	cfg := config.ProduceConfig(proxycore.Provider)
 	app := cli.NewApp()
+	// we had to set this after upgrade from urvafe v1 to v2
+	app.DisableSliceFlagSeparator = true
 	app.Name = constant.Prog
 	app.Usage = constant.Description
 	app.Version = proxycore.GetVersion()
