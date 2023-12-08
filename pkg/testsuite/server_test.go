@@ -700,37 +700,92 @@ func TestErrorTemplate(t *testing.T) {
 }
 
 func TestSkipOpenIDProviderTLSVerify(t *testing.T) {
-	cfg := newFakeKeycloakConfig()
-	cfg.SkipOpenIDProviderTLSVerify = true
-	requests := []fakeRequest{
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+		CatchPanic        bool
+	}{
 		{
-			URI:           "/auth_all/test",
-			HasLogin:      true,
-			ExpectedProxy: true,
-			Redirects:     true,
-			ExpectedCode:  http.StatusOK,
+			Name: "TestOkWithSkipTrue",
+			ProxySettings: func(c *config.Config) {
+				c.SkipOpenIDProviderTLSVerify = true
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/auth_all/test",
+					HasLogin:      true,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedCode:  http.StatusOK,
+				},
+			},
+			CatchPanic: false,
+		},
+		{
+			Name: "TestOkWithSkipTrueAndIdpSessionCheckTrue",
+			ProxySettings: func(c *config.Config) {
+				c.SkipOpenIDProviderTLSVerify = true
+				c.EnableIDPSessionCheck = true
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/auth_all/test",
+					HasLogin:      true,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedCode:  http.StatusOK,
+				},
+			},
+			CatchPanic: false,
+		},
+		{
+			Name: "TestPanicWithSkipFalse",
+			ProxySettings: func(c *config.Config) {
+				c.SkipOpenIDProviderTLSVerify = false
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/auth_all/test",
+					HasLogin:      true,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedCode:  http.StatusOK,
+				},
+			},
+			CatchPanic: true,
 		},
 	}
-	newFakeProxy(cfg, &fakeAuthConfig{EnableTLS: true}).RunTests(t, requests)
-	cfg.SkipOpenIDProviderTLSVerify = false
 
-	defer func() {
-		if r := recover(); r != nil {
-			failure, assertOk := r.(string)
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				if testCase.CatchPanic {
+					defer func() {
+						if r := recover(); r != nil {
+							failure, assertOk := r.(string)
 
-			if !assertOk {
-				t.Fatalf(apperrors.ErrAssertionFailed.Error())
-			}
+							if !assertOk {
+								t.Fatalf(apperrors.ErrAssertionFailed.Error())
+							}
 
-			check := strings.Contains(
-				failure,
-				"failed to retrieve the provider configuration from discovery url",
-			)
-			assert.True(t, check)
-		}
-	}()
-
-	newFakeProxy(cfg, &fakeAuthConfig{EnableTLS: true}).RunTests(t, requests)
+							check := strings.Contains(
+								failure,
+								"failed to retrieve the provider configuration from discovery url",
+							)
+							assert.True(t, check)
+						}
+					}()
+				}
+				c := newFakeKeycloakConfig()
+				testCase.ProxySettings(c)
+				p := newFakeProxy(c, &fakeAuthConfig{EnableTLS: true})
+				p.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
 }
 
 func TestOpenIDProviderProxy(t *testing.T) {
