@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-jose/go-jose/v3/jwt"
 	uuid "github.com/gofrs/uuid"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -269,24 +270,18 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						return
 					}
 
-					oRefresh, err := verifyToken(
-						ctx,
-						r.Provider,
-						refresh,
-						r.Config.ClientID,
-						true,
-						true,
-					)
+					var stdRefreshClaims *jwt.Claims
+					stdRefreshClaims, err = parseRefreshToken(refresh)
 					if err != nil {
 						lLog.Error(
-							apperrors.ErrVerifyRefreshToken.Error(),
+							apperrors.ErrParseRefreshToken.Error(),
 							zap.Error(err),
 						)
 						//nolint:contextcheck
 						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 						return
 					}
-					if user.ID != oRefresh.Subject {
+					if user.ID != stdRefreshClaims.Subject {
 						lLog.Error(
 							apperrors.ErrAccRefreshTokenMismatch.Error(),
 							zap.Error(err),

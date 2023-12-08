@@ -1447,7 +1447,7 @@ func TestRefreshToken(t *testing.T) {
 					Redirects:     false,
 					HasLogin:      false,
 					ExpectedProxy: false,
-					ExpectedCode:  http.StatusForbidden,
+					ExpectedCode:  http.StatusUnauthorized,
 				},
 			},
 		},
@@ -2654,16 +2654,14 @@ func TestEnableOpa(t *testing.T) {
 }
 
 func TestAuthenticationMiddleware(t *testing.T) {
-	// proxy := newFakeProxy(nil, &fakeAuthConfig{})
-	// token := newTestToken(proxy.idp.getLocation())
-	tok := newTestToken("example")
-	tok.setExpiration(time.Now().Add(-5 * time.Minute))
-	unsignedToken, err := tok.getUnsignedToken()
+	tok := NewTestToken("example")
+	tok.SetExpiration(time.Now().Add(-5 * time.Minute))
+	unsignedToken, err := tok.GetUnsignedToken()
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	badlySignedToken := unsignedToken + ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	badlySignedToken := unsignedToken + FakeSignature
 	cfg := newFakeKeycloakConfig()
 
 	requests := []struct {

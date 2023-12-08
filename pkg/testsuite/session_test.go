@@ -131,7 +131,7 @@ func TestGetIndentity(t *testing.T) {
 		testCase.ProxySettings(cfg)
 
 		p, idp, _ := newTestProxyService(cfg)
-		token, err := newTestToken(idp.getLocation()).getToken()
+		token, err := NewTestToken(idp.getLocation()).GetToken()
 		assert.NoError(t, err)
 
 		user, err := p.GetIdentity(testCase.Request(token), cfg.CookieAccessName, "")
@@ -158,7 +158,7 @@ func TestGetIndentity(t *testing.T) {
 
 func TestGetTokenInRequest(t *testing.T) {
 	defaultName := config.NewDefaultConfig().CookieAccessName
-	token, err := newTestToken("test").getToken()
+	token, err := NewTestToken("test").GetToken()
 	assert.NoError(t, err)
 	testCases := []struct {
 		Token                           string
@@ -254,10 +254,10 @@ func TestIsExpired(t *testing.T) {
 func TestGetUserContext(t *testing.T) {
 	realmRoles := []string{"realm:realm"}
 	clientRoles := []string{"client:client"}
-	token := newTestToken("test")
+	token := NewTestToken("test")
 	token.addRealmRoles(realmRoles)
 	token.addClientRoles("client", []string{"client"})
-	jwtToken, err := token.getToken()
+	jwtToken, err := token.GetToken()
 	assert.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
 	assert.NoError(t, err)
@@ -272,9 +272,9 @@ func TestGetUserContext(t *testing.T) {
 
 func TestGetUserRealmRoleContext(t *testing.T) {
 	roles := []string{"dsp-dev-vpn", "vpn-user", "dsp-prod-vpn", "openvpn:dev-vpn"}
-	token := newTestToken("test")
+	token := NewTestToken("test")
 	token.addRealmRoles(roles)
-	jwtToken, err := token.getToken()
+	jwtToken, err := token.GetToken()
 	assert.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
 	assert.NoError(t, err)
@@ -290,8 +290,8 @@ func TestGetUserRealmRoleContext(t *testing.T) {
 }
 
 func TestUserContextString(t *testing.T) {
-	token := newTestToken("test")
-	jwtToken, err := token.getToken()
+	token := NewTestToken("test")
+	jwtToken, err := token.GetToken()
 	assert.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
 	assert.NoError(t, err)

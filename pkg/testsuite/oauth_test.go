@@ -31,7 +31,7 @@ import (
 
 func TestGetUserinfo(t *testing.T) {
 	proxy, idp, _ := newTestProxyService(nil)
-	token, err := newTestToken(idp.getLocation()).getToken()
+	token, err := NewTestToken(idp.getLocation()).GetToken()
 	assert.NoError(t, err)
 	tokenSource := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
@@ -52,7 +52,7 @@ func TestGetUserinfo(t *testing.T) {
 
 func TestTokenExpired(t *testing.T) {
 	proxy, idp, _ := newTestProxyService(nil)
-	token := newTestToken(idp.getLocation())
+	token := NewTestToken(idp.getLocation())
 	testCases := []struct {
 		Expire time.Duration
 		OK     bool
@@ -66,8 +66,8 @@ func TestTokenExpired(t *testing.T) {
 		},
 	}
 	for idx, testCase := range testCases {
-		token.setExpiration(time.Now().Add(testCase.Expire))
-		jwt, err := token.getToken()
+		token.SetExpiration(time.Now().Add(testCase.Expire))
+		jwt, err := token.GetToken()
 		if err != nil {
 			t.Errorf("case %d unable to sign the token, error: %s", idx, err)
 			continue

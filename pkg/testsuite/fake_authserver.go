@@ -91,21 +91,21 @@ var defTestTokenClaims = DefaultTestTokenClaims{
 	Item3: []string{"default"},
 }
 
-type fakeToken struct {
-	claims DefaultTestTokenClaims
+type FakeToken struct {
+	Claims DefaultTestTokenClaims
 }
 
-func newTestToken(issuer string) *fakeToken {
+func NewTestToken(issuer string) *FakeToken {
 	claims := defTestTokenClaims
 	claims.Exp = time.Now().Add(1 * time.Hour).Unix()
 	claims.Iat = time.Now().Unix()
 	claims.Iss = issuer
 
-	return &fakeToken{claims: claims}
+	return &FakeToken{Claims: claims}
 }
 
 // getToken returns a JWT token from the clains
-func (t *fakeToken) getToken() (string, error) {
+func (t *FakeToken) GetToken() (string, error) {
 	input := []byte("")
 	block, _ := pem.Decode([]byte(fakePrivateKey))
 	if block != nil {
@@ -125,7 +125,7 @@ func (t *fakeToken) getToken() (string, error) {
 		return "", err
 	}
 
-	b := jwt.Signed(signer).Claims(&t.claims)
+	b := jwt.Signed(signer).Claims(&t.Claims)
 	jwt, err := b.CompactSerialize()
 	if err != nil {
 		return "", err
@@ -135,7 +135,7 @@ func (t *fakeToken) getToken() (string, error) {
 }
 
 // getUnsignedToken returns a unsigned JWT token from the claims
-func (t *fakeToken) getUnsignedToken() (string, error) {
+func (t *FakeToken) GetUnsignedToken() (string, error) {
 	input := []byte("")
 	block, _ := pem.Decode([]byte(fakePrivateKey))
 	if block != nil {
@@ -157,7 +157,7 @@ func (t *fakeToken) getUnsignedToken() (string, error) {
 		return "", err
 	}
 
-	b := jwt.Signed(signer).Claims(&t.claims)
+	b := jwt.Signed(signer).Claims(&t.Claims)
 	jwt, err := b.CompactSerialize()
 
 	if err != nil {
@@ -171,24 +171,24 @@ func (t *fakeToken) getUnsignedToken() (string, error) {
 }
 
 // setExpiration sets the expiration of the token
-func (t *fakeToken) setExpiration(tm time.Time) {
-	t.claims.Exp = tm.Unix()
+func (t *FakeToken) SetExpiration(tm time.Time) {
+	t.Claims.Exp = tm.Unix()
 }
 
 // addGroups adds groups to then token
-func (t *fakeToken) addGroups(groups []string) {
-	t.claims.Groups = groups
+func (t *FakeToken) addGroups(groups []string) {
+	t.Claims.Groups = groups
 }
 
 // addRealmRoles adds realms roles to token
-func (t *fakeToken) addRealmRoles(roles []string) {
-	t.claims.RealmAccess.Roles = roles
+func (t *FakeToken) addRealmRoles(roles []string) {
+	t.Claims.RealmAccess.Roles = roles
 }
 
 // addClientRoles adds client roles to the token
-func (t *fakeToken) addClientRoles(client string, roles []string) {
-	t.claims.ResourceAccess = make(map[string]RoleClaim)
-	t.claims.ResourceAccess[client] = RoleClaim{Roles: roles}
+func (t *FakeToken) addClientRoles(client string, roles []string) {
+	t.Claims.ResourceAccess = make(map[string]RoleClaim)
+	t.Claims.ResourceAccess[client] = RoleClaim{Roles: roles}
 }
 
 type fakeAuthServer struct {
@@ -518,15 +518,15 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Request) {
 	expires := time.Now().Add(r.expiration)
 	refreshExpires := time.Now().Add(2 * r.expiration)
-	token := newTestToken(r.getLocation())
-	token.setExpiration(expires)
-	refreshToken := newTestToken(r.getLocation())
-	refreshToken.setExpiration(refreshExpires)
-	refreshToken.claims.Aud = r.getLocation()
+	token := NewTestToken(r.getLocation())
+	token.SetExpiration(expires)
+	refreshToken := NewTestToken(r.getLocation())
+	refreshToken.SetExpiration(refreshExpires)
+	refreshToken.Claims.Aud = r.getLocation()
 	codeVerifier := ""
 
 	if req.FormValue("grant_type") == configcore.GrantTypeUmaTicket {
-		token.claims.Authorization = authorization.Permissions{
+		token.Claims.Authorization = authorization.Permissions{
 			Permissions: []authorization.Permission{
 				{
 					Scopes:       []string{"test"},
@@ -546,14 +546,14 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 	}
 
 	// sign the token with the private key
-	jwtAccess, err := token.getToken()
+	jwtAccess, err := token.GetToken()
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	// sign the token with the private key
-	jwtRefresh, err := refreshToken.getToken()
+	jwtRefresh, err := refreshToken.GetToken()
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
@@ -733,8 +733,8 @@ func (r *fakeAuthServer) ResourceHandler(wrt http.ResponseWriter, _ *http.Reques
 }
 
 func (r *fakeAuthServer) PermissionTicketHandler(wrt http.ResponseWriter, _ *http.Request) {
-	token := newTestToken(r.getLocation())
-	acc, err := token.getToken()
+	token := NewTestToken(r.getLocation())
+	acc, err := token.GetToken()
 
 	if err != nil {
 		wrt.WriteHeader(http.StatusInternalServerError)

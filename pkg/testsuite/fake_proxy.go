@@ -228,12 +228,12 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 		}
 
 		if reqCfg.HasToken {
-			token := newTestToken(f.idp.getLocation())
+			token := NewTestToken(f.idp.getLocation())
 
 			if reqCfg.TokenClaims != nil && len(reqCfg.TokenClaims) > 0 {
 				for i := range reqCfg.TokenClaims {
 					err := reflections.SetField(
-						&token.claims,
+						&token.Claims,
 						strcase.UpperCamelCase(i),
 						reqCfg.TokenClaims[i],
 					)
@@ -250,19 +250,19 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			}
 
 			if reqCfg.Expires > 0 || reqCfg.Expires < 0 {
-				token.setExpiration(time.Now().Add(reqCfg.Expires))
+				token.SetExpiration(time.Now().Add(reqCfg.Expires))
 			}
 
 			if reqCfg.TokenAuthorization != nil {
-				token.claims.Authorization = *reqCfg.TokenAuthorization
+				token.Claims.Authorization = *reqCfg.TokenAuthorization
 			}
 
 			if reqCfg.NotSigned {
-				authToken, err := token.getUnsignedToken()
+				authToken, err := token.GetUnsignedToken()
 				assert.NoError(t, err)
 				setRequestAuthentication(f.config, client, request, &reqCfg, authToken)
 			} else {
-				authToken, err := token.getToken()
+				authToken, err := token.GetToken()
 				assert.NoError(t, err)
 				setRequestAuthentication(f.config, client, request, &reqCfg, authToken)
 			}

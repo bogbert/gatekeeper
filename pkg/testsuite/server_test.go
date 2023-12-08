@@ -80,9 +80,9 @@ func TestNewKeycloakProxyWithLegacyDiscoveryURI(t *testing.T) {
 
 func TestReverseProxyHeaders(t *testing.T) {
 	proxy := newFakeProxy(nil, &fakeAuthConfig{})
-	token := newTestToken(proxy.idp.getLocation())
+	token := NewTestToken(proxy.idp.getLocation())
 	token.addRealmRoles([]string{FakeAdminRole})
-	jwt, _ := token.getToken()
+	jwt, _ := token.GetToken()
 	uri := "/auth_all/test"
 	requests := []fakeRequest{
 		{
@@ -92,7 +92,7 @@ func TestReverseProxyHeaders(t *testing.T) {
 			ExpectedProxyHeaders: map[string]string{
 				"X-Auth-Email":    "gambol99@gmail.com",
 				"X-Auth-Roles":    "role:admin,defaultclient:default",
-				"X-Auth-Subject":  token.claims.Sub,
+				"X-Auth-Subject":  token.Claims.Sub,
 				"X-Auth-Userid":   "rjayawardene",
 				"X-Auth-Username": "rjayawardene",
 			},
@@ -801,8 +801,8 @@ func TestAuthTokenHeaderDisabled(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	c.EnableTokenHeader = false
 	proxy := newFakeProxy(c, &fakeAuthConfig{})
-	token := newTestToken(proxy.idp.getLocation())
-	jwt, _ := token.getToken()
+	token := NewTestToken(proxy.idp.getLocation())
+	jwt, _ := token.GetToken()
 
 	requests := []fakeRequest{
 		{
@@ -1472,12 +1472,12 @@ func TestSkipClientIDDisabled(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	proxy := newFakeProxy(c, &fakeAuthConfig{})
 	// create two token, one with a bad client id
-	bad := newTestToken(proxy.idp.getLocation())
-	bad.claims.Aud = "bad_client_id"
-	badSigned, _ := bad.getToken()
+	bad := NewTestToken(proxy.idp.getLocation())
+	bad.Claims.Aud = "bad_client_id"
+	badSigned, _ := bad.GetToken()
 	// and the good
-	good := newTestToken(proxy.idp.getLocation())
-	goodSigned, _ := good.getToken()
+	good := NewTestToken(proxy.idp.getLocation())
+	goodSigned, _ := good.GetToken()
 	requests := []fakeRequest{
 		{
 			URI:               "/auth_all/test",
@@ -1515,12 +1515,12 @@ func TestSkipIssuer(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	proxy := newFakeProxy(c, &fakeAuthConfig{})
 	// create two token, one with a bad client id
-	bad := newTestToken(proxy.idp.getLocation())
-	bad.claims.Iss = "bad_issuer"
-	badSigned, _ := bad.getToken()
+	bad := NewTestToken(proxy.idp.getLocation())
+	bad.Claims.Iss = "bad_issuer"
+	badSigned, _ := bad.GetToken()
 	// and the good
-	good := newTestToken(proxy.idp.getLocation())
-	goodSigned, _ := good.getToken()
+	good := NewTestToken(proxy.idp.getLocation())
+	goodSigned, _ := good.GetToken()
 	requests := []fakeRequest{
 		{
 			URI:             "/auth_all/test",
@@ -1556,8 +1556,8 @@ func TestSkipIssuer(t *testing.T) {
 
 func TestAuthTokenHeaderEnabled(t *testing.T) {
 	proxy := newFakeProxy(nil, &fakeAuthConfig{})
-	token := newTestToken(proxy.idp.getLocation())
-	signed, _ := token.getToken()
+	token := NewTestToken(proxy.idp.getLocation())
+	signed, _ := token.GetToken()
 
 	requests := []fakeRequest{
 		{
@@ -1577,8 +1577,8 @@ func TestDisableAuthorizationCookie(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.EnableAuthorizationCookies = false
 	proxy := newFakeProxy(cfg, &fakeAuthConfig{})
-	token := newTestToken(proxy.idp.getLocation())
-	signed, _ := token.getToken()
+	token := NewTestToken(proxy.idp.getLocation())
+	signed, _ := token.GetToken()
 
 	requests := []fakeRequest{
 		{

@@ -77,7 +77,7 @@ func assertAlmostEquals(t *testing.T, expected time.Duration, actual time.Durati
 }
 
 func TestGetAccessCookieExpiration_NoExp(t *testing.T) {
-	token, err := newTestToken("foo").getToken()
+	token, err := NewTestToken("foo").GetToken()
 	assert.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
@@ -87,9 +87,9 @@ func TestGetAccessCookieExpiration_NoExp(t *testing.T) {
 }
 
 func TestGetAccessCookieExpiration_ZeroExp(t *testing.T) {
-	ft := newTestToken("foo")
-	ft.setExpiration(time.Unix(0, 0))
-	token, err := ft.getToken()
+	ft := NewTestToken("foo")
+	ft.SetExpiration(time.Unix(0, 0))
+	token, err := ft.GetToken()
 	assert.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
@@ -100,9 +100,9 @@ func TestGetAccessCookieExpiration_ZeroExp(t *testing.T) {
 }
 
 func TestGetAccessCookieExpiration_PastExp(t *testing.T) {
-	ft := newTestToken("foo")
-	ft.setExpiration(time.Now().AddDate(-1, 0, 0))
-	token, err := ft.getToken()
+	ft := NewTestToken("foo")
+	ft.SetExpiration(time.Now().AddDate(-1, 0, 0))
+	token, err := ft.GetToken()
 	assert.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
@@ -112,13 +112,13 @@ func TestGetAccessCookieExpiration_PastExp(t *testing.T) {
 }
 
 func TestGetAccessCookieExpiration_ValidExp(t *testing.T) {
-	fToken := newTestToken("foo")
-	token, err := fToken.getToken()
+	fToken := NewTestToken("foo")
+	token, err := fToken.GetToken()
 	assert.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
 	duration := proxy.GetAccessCookieExpiration(token)
-	expectedDuration := time.Until(time.Unix(fToken.claims.Exp, 0))
+	expectedDuration := time.Until(time.Unix(fToken.Claims.Exp, 0))
 	assertAlmostEquals(t, expectedDuration, duration)
 }

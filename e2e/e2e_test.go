@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -125,26 +126,33 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 		startAndWait(portNum, osArgs)
 	})
 
-	It("should login with service account and logout successfully", func(ctx context.Context) {
-		conf := &clientcredentials.Config{
-			ClientID:     testClient,
-			ClientSecret: testClientSecret,
-			Scopes:       []string{"email", "openid"},
-			TokenURL:     idpRealmURI + constant.IdpTokenURI,
-		}
+	When("Performing standard login", func() {
+		It("should login with service account and logout successfully",
+			Label("api_flow"),
+			Label("basic_case"),
+			func(ctx context.Context) {
+				conf := &clientcredentials.Config{
+					ClientID:     testClient,
+					ClientSecret: testClientSecret,
+					Scopes:       []string{"email", "openid"},
+					TokenURL:     idpRealmURI + constant.IdpTokenURI,
+				}
 
-		respToken, err := conf.Token(ctx)
-		Expect(err).NotTo(HaveOccurred())
+				respToken, err := conf.Token(ctx)
+				Expect(err).NotTo(HaveOccurred())
 
-		request := resty.New().SetRedirectPolicy(resty.NoRedirectPolicy()).R().SetAuthToken(respToken.AccessToken)
-		resp, err := request.Get(proxyAddress)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+				request := resty.New().SetRedirectPolicy(
+					resty.NoRedirectPolicy()).R().SetAuthToken(respToken.AccessToken)
+				resp, err := request.Get(proxyAddress)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
-		request = resty.New().R().SetAuthToken(respToken.AccessToken)
-		resp, err = request.Get(proxyAddress + "/oauth/logout")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+				request = resty.New().R().SetAuthToken(respToken.AccessToken)
+				resp, err = request.Get(proxyAddress + "/oauth/logout")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+			},
+		)
 	})
 })
 
@@ -168,7 +176,10 @@ var _ = Describe("Code Flow login/logout", func() {
 			"--no-redirects=false",
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
+			"--enable-idp-session-check=false",
 			"--openid-provider-retry-count=30",
+			"--enable-refresh-tokens=true",
+			"--encryption-key=sdkljfalisujeoir",
 			"--secure-cookie=false",
 			"--post-login-redirect-path=" + postLoginRedirectPath,
 		}
@@ -177,21 +188,111 @@ var _ = Describe("Code Flow login/logout", func() {
 		startAndWait(portNum, osArgs)
 	})
 
-	It("should login with user/password and logout successfully", func(ctx context.Context) {
-		var err error
-		rClient := resty.New()
-		resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
-		Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
-		body := resp.Body()
-		Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
+	When("Performing standard login", func() {
+		It("should login with user/password and logout successfully",
+			Label("code_flow"),
+			Label("basic_case"),
+			func(ctx context.Context) {
+				var err error
+				rClient := resty.New()
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body := resp.Body()
+				Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
+				jarURI, err := url.Parse(proxyAddress)
+				Expect(err).NotTo(HaveOccurred())
+				cookiesLogin := rClient.GetClient().Jar.Cookies(jarURI)
 
-		resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+				var accessCookieLogin string
+				for _, cook := range cookiesLogin {
+					if cook.Name == constant.AccessCookie {
+						accessCookieLogin = cook.Value
+					}
+				}
 
-		rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
-		resp, _ = rClient.R().Get(proxyAddress)
-		Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+				By("wait for access token expiration")
+				time.Sleep(32 * time.Second)
+				resp, err = rClient.R().Get(proxyAddress + "/any")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body = resp.Body()
+				Expect(strings.Contains(string(body), "/any")).To(BeTrue())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+				Expect(err).NotTo(HaveOccurred())
+				cookiesAfterRefresh := rClient.GetClient().Jar.Cookies(jarURI)
+
+				var accessCookieAfterRefresh string
+				for _, cook := range cookiesAfterRefresh {
+					if cook.Name == constant.AccessCookie {
+						accessCookieLogin = cook.Value
+					}
+				}
+
+				By("check if access token cookie has changed")
+				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
+
+				By("make another request with new access token")
+				resp, err = rClient.R().Get(proxyAddress + "/any")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body = resp.Body()
+				Expect(strings.Contains(string(body), "/any")).To(BeTrue())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+				By("log out")
+				resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+				rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
+				resp, _ = rClient.R().Get(proxyAddress)
+				Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+			},
+		)
+	})
+
+	When("Using forged expired access token with valid refresh token", func() {
+		It("should be forbidden",
+			Label("code_flow"),
+			Label("forged_access_token"),
+			Label("attack"),
+			func(ctx context.Context) {
+				var err error
+				rClient := resty.New()
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body := resp.Body()
+				Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
+				jarURI, err := url.Parse(proxyAddress)
+				Expect(err).NotTo(HaveOccurred())
+				cookiesLogin := rClient.GetClient().Jar.Cookies(jarURI)
+
+				tok := testsuite.NewTestToken("example")
+				tok.SetExpiration(time.Now().Add(-5 * time.Minute))
+				unsignedToken, err := tok.GetUnsignedToken()
+				Expect(err).NotTo(HaveOccurred())
+
+				badlySignedToken := unsignedToken + testsuite.FakeSignature
+				for _, cook := range cookiesLogin {
+					if cook.Name == constant.AccessCookie {
+						cook.Value = badlySignedToken
+					}
+				}
+
+				rClient.GetClient().Jar.SetCookies(jarURI, cookiesLogin)
+
+				By("make another request with forged access token")
+				resp, err = rClient.R().Get(proxyAddress + "/any")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(strings.Contains(string(body), "/any")).To(BeFalse())
+				Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
+
+				By("log out")
+				resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
+			},
+		)
 	})
 })
 
@@ -224,22 +325,28 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 		startAndWait(portNum, osArgs)
 	})
 
-	It("should login with user/password and logout successfully", func(ctx context.Context) {
-		var err error
-		rClient := resty.New()
-		resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
-		Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+	When("Peforming standard login", func() {
+		It("should login with user/password and logout successfully",
+			Label("code_flow"),
+			Label("pkce"),
+			func(ctx context.Context) {
+				var err error
+				rClient := resty.New()
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
-		body := resp.Body()
-		Expect(strings.Contains(string(body), pkceCookieName)).To(BeTrue())
+				body := resp.Body()
+				Expect(strings.Contains(string(body), pkceCookieName)).To(BeTrue())
 
-		resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+				resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
-		rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
-		resp, _ = rClient.R().Get(proxyAddress)
-		Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+				rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
+				resp, _ = rClient.R().Get(proxyAddress)
+				Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+			},
+		)
 	})
 })
 

@@ -15,4 +15,5 @@ const (
 	ValidPassword          = "test"
 	testEncryptionKey      = "ZSeCYDUxIlhDrmPpa1Ldc7il384esSF2"
 	randomLocalHost        = "127.0.0.1:0"
+	FakeSignature          = ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
 )

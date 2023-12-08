@@ -739,7 +739,7 @@ func TestRevocation(t *testing.T) {
 func TestTokenHandler(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	uri := proxy.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.TokenURL)
-	goodToken, err := newTestToken("example").getToken()
+	goodToken, err := NewTestToken("example").GetToken()
 	if err != nil {
 		t.Fatalf("Error when creating test token %v", err)
 	}

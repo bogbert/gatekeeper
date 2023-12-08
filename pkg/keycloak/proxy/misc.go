@@ -740,3 +740,18 @@ func (r *OauthProxy) refreshUmaToken(
 	umaUser.RawToken = tok.AccessToken
 	return umaUser, nil
 }
+
+func parseRefreshToken(rawRefreshToken string) (*jwt.Claims, error) {
+	refreshToken, err := jwt.ParseSigned(rawRefreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	stdRefreshClaims := &jwt.Claims{}
+	err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
+	if err != nil {
+		return nil, err
+	}
+
+	return stdRefreshClaims, nil
+}

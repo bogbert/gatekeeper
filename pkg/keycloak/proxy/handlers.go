@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -231,23 +230,21 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	// step: does the response have a refresh token and we do NOT ignore refresh tokens?
 	if r.Config.EnableRefreshTokens && refreshToken != "" {
 		var encrypted string
-		var oRefresh *oidc3.IDToken
-		oRefresh, err = verifyToken(
-			req.Context(),
-			r.Provider,
-			refreshToken,
-			r.Config.ClientID,
-			true,
-			true,
-		)
-
+		var stdRefreshClaims *jwt.Claims
+		stdRefreshClaims, err = parseRefreshToken(refreshToken)
 		if err != nil {
-			scope.Logger.Error(apperrors.ErrVerifyRefreshToken.Error(), zap.Error(err))
+			scope.Logger.Error(apperrors.ErrParseRefreshToken.Error(), zap.Error(err))
 			r.accessForbidden(writer, req)
 			return
 		}
 
-		oidcTokensCookiesExp = time.Until(oRefresh.Expiry)
+		if stdRefreshClaims.Subject != oAccToken.Subject {
+			scope.Logger.Error(apperrors.ErrAccRefreshTokenMismatch.Error(), zap.Error(err))
+			r.accessForbidden(writer, req)
+			return
+		}
+
+		oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
 		encrypted, err = r.encryptToken(scope, refreshToken, r.Config.EncryptionKey, "refresh", writer)
 		if err != nil {
 			return
