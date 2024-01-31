@@ -20,16 +20,21 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/Nerzal/gocloak/v12"
+	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v3/jwt"
 	uuid "github.com/gofrs/uuid"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"golang.org/x/oauth2"
 
@@ -162,12 +167,35 @@ func loggingMiddleware(
 	authenticationMiddleware is responsible for verifying the access token
 */
 //nolint:funlen,cyclop
-func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler {
+func authenticationMiddleware(
+	logger *zap.Logger,
+	cookieAccessName string,
+	cookieRefreshName string,
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	idpClient *gocloak.GoCloak,
+	enableIDPSessionCheck bool,
+	provider *oidc3.Provider,
+	skipTokenVerification bool,
+	clientID string,
+	skipAccessTokenClientIDCheck bool,
+	skipAccessTokenIssuerCheck bool,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	enableRefreshTokens bool,
+	redirectionURL string,
+	cookMgr *cookie.Manager,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encryptionKey string,
+	redirectToAuthorization func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	store storage.Storage,
+	accessTokenDuration time.Duration,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 			if !assertOk {
-				r.Log.Error(apperrors.ErrAssertionFailed.Error())
+				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
 
@@ -175,11 +203,11 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 			scope.Logger.Debug("authentication middleware")
 
 			// grab the user identity from the request
-			user, err := r.GetIdentity(req, r.Config.CookieAccessName, "")
+			user, err := getIdentity(req, cookieAccessName, "")
 			if err != nil {
 				scope.Logger.Error(err.Error())
 				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+				next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
 				return
 			}
 
@@ -198,24 +226,24 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 			// client from provider through this parameter, although
 			// provider is already configured with client!!!
 			// https://github.com/coreos/go-oidc/issues/402
-			httpClient := r.IdpClient.RestyClient().GetClient()
+			httpClient := idpClient.RestyClient().GetClient()
 			oidcLibCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 
-			if r.Config.EnableIDPSessionCheck {
+			if enableIDPSessionCheck {
 				tokenSource := oauth2.StaticTokenSource(
 					&oauth2.Token{AccessToken: user.RawToken},
 				)
-				_, err := r.Provider.UserInfo(oidcLibCtx, tokenSource)
+				_, err := provider.UserInfo(oidcLibCtx, tokenSource)
 				if err != nil {
 					scope.Logger.Error(err.Error())
 					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+					next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
 					return
 				}
 			}
 
 			// step: skip if we are running skip-token-verification
-			if r.Config.SkipTokenVerification {
+			if skipTokenVerification {
 				scope.Logger.Warn(
 					"skip token verification enabled, " +
 						"skipping verification - TESTING ONLY",
@@ -224,17 +252,17 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 				if user.IsExpired() {
 					lLog.Error(apperrors.ErrSessionExpiredVerifyOff.Error())
 					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+					next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
 					return
 				}
 			} else { //nolint:gocritic
 				_, err := verifyToken(
 					ctx,
-					r.Provider,
+					provider,
 					user.RawToken,
-					r.Config.ClientID,
-					r.Config.SkipAccessTokenClientIDCheck,
-					r.Config.SkipAccessTokenIssuerCheck,
+					clientID,
+					skipAccessTokenClientIDCheck,
+					skipAccessTokenIssuerCheck,
 				)
 				if err != nil {
 					if errors.Is(err, apperrors.ErrTokenSignature) {
@@ -243,7 +271,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 							zap.Error(err),
 						)
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
@@ -253,28 +281,34 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 							zap.Error(err),
 						)
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
-					if !r.Config.EnableRefreshTokens {
+					if !enableRefreshTokens {
 						lLog.Error(apperrors.ErrSessionExpiredRefreshOff.Error())
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
 						return
 					}
 
 					lLog.Info("accces token for user has expired, attemping to refresh the token")
 
 					// step: check if the user has refresh token
-					refresh, _, err := r.retrieveRefreshToken(req.WithContext(ctx), user)
+					refresh, _, err := retrieveRefreshToken(
+						store,
+						cookieRefreshName,
+						encryptionKey,
+						req.WithContext(ctx),
+						user,
+					)
 					if err != nil {
 						scope.Logger.Error(
 							apperrors.ErrRefreshTokenNotFound.Error(),
 							zap.Error(err),
 						)
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
 						return
 					}
 
@@ -286,7 +320,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 							zap.Error(err),
 						)
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 					if user.ID != stdRefreshClaims.Subject {
@@ -295,7 +329,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 							zap.Error(err),
 						)
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
@@ -307,7 +341,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					//
 					// exp: expiration of the access token
 					// expiresIn: expiration of the ID token
-					conf := r.newOAuth2Config(r.Config.RedirectionURL)
+					conf := newOAuth2Config(redirectionURL)
 
 					lLog.Debug(
 						"issuing refresh token request",
@@ -320,7 +354,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						switch err {
 						case apperrors.ErrRefreshTokenExpired:
 							lLog.Warn("refresh token has expired, cannot retrieve access token")
-							r.Cm.ClearAllCookies(req.WithContext(ctx), wrt)
+							cookMgr.ClearAllCookies(req.WithContext(ctx), wrt)
 						default:
 							lLog.Debug(
 								apperrors.ErrAccTokenRefreshFailure.Error(),
@@ -333,7 +367,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						}
 
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
 						return
 					}
 
@@ -351,7 +385,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 					if refreshExpiresIn == 0 {
 						// refresh token expiry claims not available: try to parse refresh token
-						refreshExpiresIn = r.GetAccessCookieExpiration(refresh)
+						refreshExpiresIn = GetAccessCookieExpiration(lLog, accessTokenDuration, refresh)
 					}
 
 					lLog.Info(
@@ -362,27 +396,27 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 					accessToken := newRawAccToken
 
-					if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-						if accessToken, err = encryption.EncodeText(accessToken, r.Config.EncryptionKey); err != nil {
+					if enableEncryptedToken || forceEncryptedCookie {
+						if accessToken, err = encryption.EncodeText(accessToken, encryptionKey); err != nil {
 							lLog.Error(
 								apperrors.ErrEncryptAccToken.Error(),
 								zap.Error(err),
 							)
 							//nolint:contextcheck
-							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+							next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 							return
 						}
 					}
 
 					// step: inject the refreshed access token
-					r.Cm.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
+					cookMgr.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
 
 					// update the with the new access token and inject into the context
 					newUser, err := ExtractIdentity(&newAccToken)
 					if err != nil {
 						lLog.Error(err.Error())
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
@@ -393,7 +427,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 							zap.Duration("refresh_expires_in", refreshExpiresIn),
 						)
 						var encryptedRefreshToken string
-						encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, r.Config.EncryptionKey)
+						encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
 						if err != nil {
 							lLog.Error(
 								apperrors.ErrEncryptRefreshToken.Error(),
@@ -403,25 +437,27 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 							return
 						}
 
-						if r.useStore() {
-							go func(old, newToken string, encrypted string) {
-								if err = r.DeleteRefreshToken(req.Context(), old); err != nil {
+						if store != nil {
+							go func(ctx context.Context, old string, newToken string, encrypted string) {
+								ctxx, cancel := context.WithCancel(ctx)
+								defer cancel()
+								if err = store.Delete(ctxx, utils.GetHashKey(old)); err != nil {
 									lLog.Error(
 										apperrors.ErrDelTokFromStore.Error(),
 										zap.Error(err),
 									)
 								}
 
-								if err = r.StoreRefreshToken(req.Context(), newToken, encrypted, refreshExpiresIn); err != nil {
+								if err = store.Set(ctxx, utils.GetHashKey(newToken), encrypted, refreshExpiresIn); err != nil {
 									lLog.Error(
 										apperrors.ErrSaveTokToStore.Error(),
 										zap.Error(err),
 									)
 									return
 								}
-							}(user.RawToken, newRawAccToken, encryptedRefreshToken)
+							}(ctx, user.RawToken, newRawAccToken, encryptedRefreshToken)
 						} else {
-							r.Cm.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
+							cookMgr.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
 						}
 					}
 
@@ -442,12 +478,36 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 	authorizationMiddleware is responsible for verifying permissions in access_token/uma_token
 */
 //nolint:cyclop
-func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
+func authorizationMiddleware(
+	logger *zap.Logger,
+	enableUma bool,
+	enableUmaMethodScope bool,
+	cookieUMAName string,
+	noProxy bool,
+	pat *PAT,
+	oidcProvider *oidc3.Provider,
+	idpClient *gocloak.GoCloak,
+	openIDProviderTimeout time.Duration,
+	realm string,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encryptionKey string,
+	cookManager *cookie.Manager,
+	enableOpa bool,
+	opaTimeout time.Duration,
+	opaAuthzURL *url.URL,
+	discoveryURI *url.URL,
+	clientID string,
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 			if !assertOk {
-				r.Log.Error(apperrors.ErrAssertionFailed.Error())
+				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
 
@@ -465,16 +525,16 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 
 			scope.Logger.Debug("query external authz provider for authz")
 
-			if r.Config.EnableUma {
+			if enableUma {
 				var methodScope *string
-				if r.Config.EnableUmaMethodScope {
+				if enableUmaMethodScope {
 					methSc := "method:" + req.Method
-					if r.Config.NoProxy {
+					if noProxy {
 						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
 						if xForwardedMethod == "" {
 							scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 							//nolint:contextcheck
-							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+							next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 							return
 						}
 						methSc = "method:" + xForwardedMethod
@@ -483,12 +543,12 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 				}
 
 				authzPath := req.URL.Path
-				if r.Config.NoProxy {
+				if noProxy {
 					authzPath = req.Header.Get("X-Forwarded-URI")
 					if authzPath == "" {
 						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 				}
@@ -497,49 +557,68 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					targetPath string,
 					userPerms authorization.Permissions,
 				) (authorization.AuthzDecision, error) {
-					r.pat.m.RLock()
-					token := r.pat.Token.AccessToken
-					r.pat.m.RUnlock()
+					pat.m.RLock()
+					token := pat.Token.AccessToken
+					pat.m.RUnlock()
 					provider = authorization.NewKeycloakAuthorizationProvider(
 						userPerms,
 						targetPath,
-						r.IdpClient,
-						r.Config.OpenIDProviderTimeout,
+						idpClient,
+						openIDProviderTimeout,
 						token,
-						r.Config.Realm,
+						realm,
 						methodScope,
 					)
 					return provider.Authorize()
 				}
 
-				decision, err = r.WithUMAIdentity(req, authzPath, user, authzFunc)
+				decision, err = WithUMAIdentity(
+					req,
+					authzPath,
+					user,
+					cookieUMAName,
+					oidcProvider,
+					clientID,
+					skipClientIDCheck,
+					skipIssuerCheck,
+					getIdentity,
+					authzFunc,
+				)
 				if err != nil {
 					var umaUser *UserContext
 					scope.Logger.Error(err.Error())
 					scope.Logger.Info("trying to get new uma token")
 
-					umaUser, err = r.refreshUmaToken(req, authzPath, user, methodScope)
+					umaUser, err = refreshUmaToken(
+						req.Context(),
+						pat,
+						idpClient,
+						realm,
+						authzPath,
+						user,
+						methodScope,
+					)
 					if err == nil {
 						umaToken := umaUser.RawToken
-						if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-							if umaToken, err = encryption.EncodeText(umaToken, r.Config.EncryptionKey); err != nil {
+						if enableEncryptedToken || forceEncryptedCookie {
+							if umaToken, err = encryption.EncodeText(umaToken, encryptionKey); err != nil {
 								scope.Logger.Error(err.Error())
 								//nolint:contextcheck
-								next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+								next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 								return
 							}
 						}
 
-						r.Cm.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
+						cookManager.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
 						wrt.Header().Set(constant.UMAHeader, umaToken)
 						scope.Logger.Debug("got uma token")
 						decision, err = authzFunc(authzPath, umaUser.Permissions)
 					}
 				}
-			} else if r.Config.EnableOpa {
+			} else if enableOpa {
 				provider = authorization.NewOpaAuthorizationProvider(
-					r.Config.OpaTimeout,
-					*r.Config.OpaAuthzURL,
+					opaTimeout,
+					*opaAuthzURL,
 					req,
 				)
 				decision, err = provider.Authorize()
@@ -566,12 +645,12 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			scope.Logger.Info("authz decision", zap.String("decision", decision.String()))
 
 			if decision == authorization.DeniedAuthz {
-				if r.Config.EnableUma {
+				if enableUma {
 					prv, ok := provider.(*authorization.KeycloakAuthorizationProvider)
 					if !ok {
 						scope.Logger.Error(apperrors.ErrAssertionFailed.Error())
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
@@ -582,15 +661,15 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					} else {
 						permHeader := fmt.Sprintf(
 							`realm="%s", as_uri="%s", ticket="%s"`,
-							r.Config.Realm,
-							r.Config.DiscoveryURI.Host,
+							realm,
+							discoveryURI.Host,
 							ticket,
 						)
 						wrt.Header().Add(constant.UMATicketHeader, permHeader)
 					}
 				}
 				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 				return
 			}
 

@@ -17,28 +17,20 @@ package proxy
 
 import (
 	"context"
-	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
+	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
-
-	"go.uber.org/zap"
 )
 
-// useStore checks if we are using a store to hold the refresh tokens
-func (r *OauthProxy) useStore() bool {
-	return r.Store != nil
-}
-
-// StoreRefreshToken the token to the store
-func (r *OauthProxy) StoreRefreshToken(ctx context.Context, token string, value string, expiration time.Duration) error {
-	return r.Store.Set(ctx, utils.GetHashKey(token), value, expiration)
-}
-
 // Get retrieves a token from the store, the key we are using here is the access token
-func (r *OauthProxy) GetRefreshToken(ctx context.Context, token string) (string, error) {
+func GetRefreshTokenFromStore(
+	ctx context.Context,
+	store storage.Storage,
+	token string,
+) (string, error) {
 	// step: the key is the access token
-	val, err := r.Store.Get(ctx, utils.GetHashKey(token))
+	val, err := store.Get(ctx, utils.GetHashKey(token))
 	if err != nil {
 		return val, err
 	}
@@ -47,21 +39,4 @@ func (r *OauthProxy) GetRefreshToken(ctx context.Context, token string) (string,
 	}
 
 	return val, nil
-}
-
-// DeleteRefreshToken removes a key from the store
-func (r *OauthProxy) DeleteRefreshToken(ctx context.Context, token string) error {
-	if err := r.Store.Delete(ctx, utils.GetHashKey(token)); err != nil {
-		r.Log.Error("unable to delete token", zap.Error(err))
-		return err
-	}
-	return nil
-}
-
-// Close is used to close off any resources
-func (r *OauthProxy) CloseStore() error {
-	if r.Store != nil {
-		return r.Store.Close()
-	}
-	return nil
 }

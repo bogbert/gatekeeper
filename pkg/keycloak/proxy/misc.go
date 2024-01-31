@@ -36,6 +36,7 @@ import (
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
 )
@@ -169,72 +170,85 @@ func WithOAuthURI(baseURI string, oauthURI string) func(uri string) string {
 }
 
 // redirectToAuthorization redirects the user to authorization handler
-func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.Request) context.Context {
-	if r.Config.NoRedirects {
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return revokeProxy(r.Log, req)
-	}
-
-	// step: add a state referrer to the authorization page
-	uuid := r.Cm.DropStateParameterCookie(req, wrt)
-	authQuery := fmt.Sprintf("?state=%s", uuid)
-
-	// step: if verification is switched off, we can't authorization
-	if r.Config.SkipTokenVerification {
-		r.Log.Error(
-			"refusing to redirection to authorization endpoint, " +
-				"skip token verification switched on",
-		)
-
-		wrt.WriteHeader(http.StatusForbidden)
-		return revokeProxy(r.Log, req)
-	}
-
-	url := r.WithOAuthURI(constant.AuthorizationURL + authQuery)
-
-	if r.Config.NoProxy && !r.Config.NoRedirects {
-		xForwardedHost := req.Header.Get("X-Forwarded-Host")
-		xProto := req.Header.Get("X-Forwarded-Proto")
-
-		if xForwardedHost == "" || xProto == "" {
-			r.Log.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
-
-			wrt.WriteHeader(http.StatusForbidden)
-			return revokeProxy(r.Log, req)
+func redirectToAuthorization(
+	logger *zap.Logger,
+	noRedirects bool,
+	cookManager *cookie.Manager,
+	skipTokenVerification bool,
+	noProxy bool,
+	baseURI string,
+	oAuthURI string,
+) func(wrt http.ResponseWriter, req *http.Request) context.Context {
+	return func(wrt http.ResponseWriter, req *http.Request) context.Context {
+		if noRedirects {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return revokeProxy(logger, req)
 		}
 
-		url = fmt.Sprintf(
-			"%s://%s%s",
-			xProto,
-			xForwardedHost,
+		// step: add a state referrer to the authorization page
+		uuid := cookManager.DropStateParameterCookie(req, wrt)
+		authQuery := fmt.Sprintf("?state=%s", uuid)
+
+		// step: if verification is switched off, we can't authorization
+		if skipTokenVerification {
+			logger.Error(
+				"refusing to redirection to authorization endpoint, " +
+					"skip token verification switched on",
+			)
+
+			wrt.WriteHeader(http.StatusForbidden)
+			return revokeProxy(logger, req)
+		}
+
+		url := WithOAuthURI(baseURI, oAuthURI)(constant.AuthorizationURL + authQuery)
+
+		if noProxy && !noRedirects {
+			xForwardedHost := req.Header.Get("X-Forwarded-Host")
+			xProto := req.Header.Get("X-Forwarded-Proto")
+
+			if xForwardedHost == "" || xProto == "" {
+				logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
+
+				wrt.WriteHeader(http.StatusForbidden)
+				return revokeProxy(logger, req)
+			}
+
+			url = fmt.Sprintf(
+				"%s://%s%s",
+				xProto,
+				xForwardedHost,
+				url,
+			)
+		}
+
+		logger.Debug("redirecting to url", zap.String("url", url))
+
+		redirectToURL(
+			logger,
 			url,
+			wrt,
+			req,
+			http.StatusSeeOther,
 		)
+
+		return revokeProxy(logger, req)
 	}
-
-	r.Log.Debug("redirecting to url", zap.String("url", url))
-
-	redirectToURL(
-		r.Log,
-		url,
-		wrt,
-		req,
-		http.StatusSeeOther,
-	)
-
-	return revokeProxy(r.Log, req)
 }
 
 // GetAccessCookieExpiration calculates the expiration of the access token cookie
-func (r *OauthProxy) GetAccessCookieExpiration(refresh string) time.Duration {
+func GetAccessCookieExpiration(
+	logger *zap.Logger,
+	accessTokenDuration time.Duration,
+	refresh string,
+) time.Duration {
 	// notes: by default the duration of the access token will be the configuration option, if
 	// however we can decode the refresh token, we will set the duration to the duration of the
 	// refresh token
-	duration := r.Config.AccessTokenDuration
+	duration := accessTokenDuration
 
 	webToken, err := jwt.ParseSigned(refresh)
-
 	if err != nil {
-		r.Log.Error("unable to parse token")
+		logger.Error("unable to parse token")
 	}
 
 	if ident, err := ExtractIdentity(webToken); err == nil {
@@ -244,12 +258,12 @@ func (r *OauthProxy) GetAccessCookieExpiration(refresh string) time.Duration {
 			duration = delta
 		}
 
-		r.Log.Debug(
+		logger.Debug(
 			"parsed refresh token with new duration",
 			zap.Duration("new duration", delta),
 		)
 	} else {
-		r.Log.Debug("refresh token is opaque and cannot be used to extend calculated duration")
+		logger.Debug("refresh token is opaque and cannot be used to extend calculated duration")
 	}
 
 	return duration
@@ -371,19 +385,41 @@ func (r *OauthProxy) getPAT(done chan bool) {
 	}
 }
 
-func (r *OauthProxy) WithUMAIdentity(
+func WithUMAIdentity(
 	req *http.Request,
 	targetPath string,
 	user *UserContext,
+	cookieUMAName string,
+	provider *oidc3.Provider,
+	clientID string,
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
 	authzFunc func(targetPath string, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
 ) (authorization.AuthzDecision, error) {
-	umaUser, err := r.GetIdentity(req, r.Config.CookieUMAName, constant.UMAHeader)
+	umaUser, err := getIdentity(req, cookieUMAName, constant.UMAHeader)
 	if err != nil {
 		return authorization.DeniedAuthz, err
 	}
 
-	err = r.verifyUmaToken(user, umaUser, req)
+	// make sure somebody doesn't sent one user access token
+	// and others user valid uma token in one request
+	if umaUser.ID != user.ID {
+		return authorization.DeniedAuthz, apperrors.ErrAccessMismatchUmaToken
+	}
+
+	_, err = verifyToken(
+		req.Context(),
+		provider,
+		umaUser.RawToken,
+		clientID,
+		skipClientIDCheck,
+		skipIssuerCheck,
+	)
 	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return authorization.DeniedAuthz, apperrors.ErrUMATokenExpired
+		}
 		return authorization.DeniedAuthz, err
 	}
 
@@ -391,18 +427,15 @@ func (r *OauthProxy) WithUMAIdentity(
 }
 
 // getRPT retrieves relaying party token
-func (r *OauthProxy) getRPT(
-	req *http.Request,
+func getRPT(
+	ctx context.Context,
+	pat *PAT,
+	idpClient *gocloak.GoCloak,
+	realm string,
 	targetPath string,
 	userToken string,
 	methodScope *string,
 ) (*gocloak.JWT, error) {
-	ctx, cancel := context.WithTimeout(
-		req.Context(),
-		r.Config.OpenIDProviderTimeout,
-	)
-	defer cancel()
-
 	matchingURI := true
 	resourceParam := gocloak.GetResourceParams{
 		URI:         &targetPath,
@@ -410,14 +443,14 @@ func (r *OauthProxy) getRPT(
 		Scope:       methodScope,
 	}
 
-	r.pat.m.RLock()
-	pat := r.pat.Token.AccessToken
-	r.pat.m.RUnlock()
+	pat.m.RLock()
+	patTok := pat.Token.AccessToken
+	pat.m.RUnlock()
 
-	resources, err := r.IdpClient.GetResourcesClient(
+	resources, err := idpClient.GetResourcesClient(
 		ctx,
-		pat,
-		r.Config.Realm,
+		patTok,
+		realm,
 		resourceParam,
 	)
 	if err != nil {
@@ -460,10 +493,10 @@ func (r *OauthProxy) getRPT(
 		},
 	}
 
-	permTicket, err := r.IdpClient.CreatePermissionTicket(
+	permTicket, err := idpClient.CreatePermissionTicket(
 		ctx,
-		pat,
-		r.Config.Realm,
+		patTok,
+		realm,
 		permissions,
 	)
 	if err != nil {
@@ -483,10 +516,10 @@ func (r *OauthProxy) getRPT(
 	}
 
 	if userToken == "" {
-		userToken = pat
+		userToken = patTok
 	}
 
-	rpt, err := r.IdpClient.GetRequestingPartyToken(ctx, userToken, r.Config.Realm, rptOptions)
+	rpt, err := idpClient.GetRequestingPartyToken(ctx, userToken, realm, rptOptions)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%s resource: %s %w",
@@ -549,39 +582,7 @@ func (r *OauthProxy) getCodeFlowTokens(
 	return resp.AccessToken, idToken, resp.RefreshToken, nil
 }
 
-func (r *OauthProxy) verifyUmaToken(
-	accessUserCtx *UserContext,
-	umaUserCtx *UserContext,
-	req *http.Request,
-) error {
-	// make sure somebody doesn't sent one user access token
-	// and others user valid uma token in one request
-	if umaUserCtx.ID != accessUserCtx.ID {
-		return apperrors.ErrAccessMismatchUmaToken
-	}
-
-	verifier := r.Provider.Verifier(
-		&oidc3.Config{
-			ClientID:          r.Config.ClientID,
-			SkipClientIDCheck: r.Config.SkipAccessTokenClientIDCheck,
-			SkipIssuerCheck:   r.Config.SkipAccessTokenIssuerCheck,
-		},
-	)
-
-	ctx, cancel := context.WithTimeout(req.Context(), r.Config.OpenIDProviderTimeout)
-	defer cancel()
-
-	_, err := verifier.Verify(ctx, umaUserCtx.RawToken)
-	if err != nil {
-		if strings.Contains(err.Error(), "token is expired") {
-			return apperrors.ErrUMATokenExpired
-		}
-		return fmt.Errorf("%s %w", apperrors.ErrTokenVerificationFailure.Error(), err)
-	}
-
-	return nil
-}
-
+// verifyOIDCTokens
 func verifyOIDCTokens(
 	ctx context.Context,
 	provider *oidc3.Provider,
@@ -716,13 +717,24 @@ func (r *OauthProxy) getRequestURIFromCookie(
 	return string(decoded)
 }
 
-func (r *OauthProxy) refreshUmaToken(
-	req *http.Request,
+func refreshUmaToken(
+	ctx context.Context,
+	pat *PAT,
+	idpClient *gocloak.GoCloak,
+	realm string,
 	targetPath string,
 	user *UserContext,
 	methodScope *string,
 ) (*UserContext, error) {
-	tok, err := r.getRPT(req, targetPath, user.RawToken, methodScope)
+	tok, err := getRPT(
+		ctx,
+		pat,
+		idpClient,
+		realm,
+		targetPath,
+		user.RawToken,
+		methodScope,
+	)
 	if err != nil {
 		return nil, err
 	}

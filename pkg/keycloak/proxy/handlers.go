@@ -34,6 +34,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/grokify/go-pkce"
 	"go.uber.org/zap"
@@ -251,8 +252,8 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		}
 
 		switch {
-		case r.useStore():
-			if err = r.StoreRefreshToken(req.Context(), rawAccessToken, encrypted, oidcTokensCookiesExp); err != nil {
+		case r.Store != nil:
+			if err = r.Store.Set(req.Context(), utils.GetHashKey(rawAccessToken), encrypted, oidcTokensCookiesExp); err != nil {
 				scope.Logger.Error(
 					apperrors.ErrSaveTokToStore.Error(),
 					zap.Error(err),
@@ -294,7 +295,15 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		// could try to get new uma token/cookie, e.g in case he tried first to access
 		// resource to which he doesn't have access
 
-		token, erru := r.getRPT(req, redirectURI, accessToken, methodScope)
+		token, erru := getRPT(
+			req.Context(),
+			r.pat,
+			r.IdpClient,
+			r.Config.Realm,
+			redirectURI,
+			accessToken,
+			methodScope,
+		)
 		umaError = erru
 		if token != nil {
 			umaToken = token.AccessToken
@@ -455,7 +464,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 				req,
 				writer,
 				accessToken,
-				r.GetAccessCookieExpiration(token.RefreshToken),
+				GetAccessCookieExpiration(scope.Logger, r.Config.AccessTokenDuration, token.RefreshToken),
 			)
 
 			if r.Config.EnableIDTokenCookie {
@@ -463,7 +472,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 					req,
 					writer,
 					idToken,
-					r.GetAccessCookieExpiration(token.RefreshToken),
+					GetAccessCookieExpiration(scope.Logger, r.Config.AccessTokenDuration, token.RefreshToken),
 				)
 			}
 
@@ -485,10 +494,10 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 				expiration = time.Until(stdRefreshClaims.Expiry.Time())
 			}
 
-			switch r.useStore() {
+			switch r.Store != nil {
 			case true:
-				if err = r.StoreRefreshToken(req.Context(), token.AccessToken, refreshToken, expiration); err != nil {
-					scope.Logger.Warn(
+				if err = r.Store.Set(req.Context(), utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
+					scope.Logger.Error(
 						apperrors.ErrSaveTokToStore.Error(),
 						zap.Error(err),
 					)
@@ -613,7 +622,13 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 	identityToken := user.RawToken
 
 	//nolint:vetshadow
-	if refresh, _, err := r.retrieveRefreshToken(req, user); err == nil {
+	if refresh, _, err := retrieveRefreshToken(
+		r.Store,
+		r.Config.CookieRefreshName,
+		r.Config.EncryptionKey,
+		req,
+		user,
+	); err == nil {
 		identityToken = refresh
 	}
 
@@ -630,9 +645,9 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 	metrics.OauthTokensMetric.WithLabelValues("logout").Inc()
 
 	// step: check if the user has a state session and if so revoke it
-	if r.useStore() {
+	if r.Store != nil {
 		go func() {
-			if err = r.DeleteRefreshToken(req.Context(), user.RawToken); err != nil {
+			if err := r.Store.Delete(req.Context(), utils.GetHashKey(user.RawToken)); err != nil {
 				scope.Logger.Error(
 					apperrors.ErrDelTokFromStore.Error(),
 					zap.Error(err),
@@ -824,15 +839,21 @@ func proxyMetricsHandler(
 }
 
 // retrieveRefreshToken retrieves the refresh token from store or cookie
-func (r *OauthProxy) retrieveRefreshToken(req *http.Request, user *UserContext) (string, string, error) {
+func retrieveRefreshToken(
+	store storage.Storage,
+	cookieRefreshName string,
+	encryptionKey string,
+	req *http.Request,
+	user *UserContext,
+) (string, string, error) {
 	var token string
 	var err error
 
-	switch r.useStore() {
+	switch store != nil {
 	case true:
-		token, err = r.GetRefreshToken(req.Context(), user.RawToken)
+		token, err = GetRefreshTokenFromStore(req.Context(), store, user.RawToken)
 	default:
-		token, err = utils.GetRefreshTokenFromCookie(req, r.Config.CookieRefreshName)
+		token, err = utils.GetRefreshTokenFromCookie(req, cookieRefreshName)
 	}
 
 	if err != nil {
@@ -840,7 +861,7 @@ func (r *OauthProxy) retrieveRefreshToken(req *http.Request, user *UserContext) 
 	}
 
 	encrypted := token // returns encrypted, avoids encoding twice
-	token, err = encryption.DecodeText(token, r.Config.EncryptionKey)
+	token, err = encryption.DecodeText(token, encryptionKey)
 	return token, encrypted, err
 }
 

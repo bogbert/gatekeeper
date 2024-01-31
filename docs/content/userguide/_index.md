@@ -405,7 +405,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.9.3
+  image: quay.io/gogatekeeper/gatekeeper:2.9.4
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -432,7 +432,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.9.3
+  image: quay.io/gogatekeeper/gatekeeper:2.9.4
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -777,6 +777,59 @@ gatekeeper configuration:
       - --discovery-url=https://keycloak-dns-name/realms/censored
       - --enable-default-deny=true # this option will ensure protection of all paths /*, according our traefik config, traefik will send it to /
       - --resources=headers=x-some-header:somevalue,x-other-header:othervalue
+```
+
+in some cases you maybe use traefik without k8s, here is example traefik configuration, no k8s resources:
+
+```yaml
+http:
+ routers:
+   app:
+     entryPoints:
+       - "websecure"
+     rule: "Host(`domain.org`)"
+     middlewares:
+       - "app-middleware"
+       - "app-headers"
+     tls:
+       certResolver: letsencrypt
+     service: app-service
+
+   app-proxy:
+     entryPoints:
+       - "websecure"
+     rule: "Host(`domain.org`) && PathPrefix(`/oauth`)" # here you see that /oauth prefix is routed directly to gatekeeper
+     tls:
+       certResolver: letsencrypt
+     service: app-proxy
+
+################     
+ 
+  middlewares:
+    app-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: https
+          X-Forwarded-Host: domain.org
+          X-Forwarded-Uri: /
+
+    app-middleware:
+      forwardAuth:
+        address: "http://192.168.140.93:4180 # gatekeeper container address
+
+#####################          
+ services:          
+   app-service:
+     loadBalancer:
+       servers:
+         - url: "http://192.168.x.x:80" # App container address
+       passHostHeader: true
+
+   app-proxy:
+     loadBalancer:
+       servers:
+         - url: "http://192.168.x.x:4180" # Gatekeeper container address
+       passHostHeader: true
 ```
 
 nginx forward-auth configuration, nginx is more strict than traefik and rejects redirects,

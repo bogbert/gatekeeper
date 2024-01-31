@@ -335,6 +335,16 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.WithOAuthURI,
 	)
 
+	redToAuth := redirectToAuthorization(
+		r.Log,
+		r.Config.NoRedirects,
+		r.Cm,
+		r.Config.SkipTokenVerification,
+		r.Config.NoProxy,
+		r.Config.BaseURI,
+		r.Config.OAuthURI,
+	)
+
 	if r.Config.EnableHmac {
 		engine.Use(hmacMiddleware(r.Log, r.Config.EncryptionKey))
 	}
@@ -389,14 +399,39 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		)
 	}
 
+	authMid := authenticationMiddleware(
+		r.Log,
+		r.Config.CookieAccessName,
+		r.Config.CookieRefreshName,
+		r.GetIdentity,
+		r.IdpClient,
+		r.Config.EnableIDPSessionCheck,
+		r.Provider,
+		r.Config.SkipTokenVerification,
+		r.Config.ClientID,
+		r.Config.SkipAccessTokenClientIDCheck,
+		r.Config.SkipAccessTokenIssuerCheck,
+		r.accessForbidden,
+		r.Config.EnableRefreshTokens,
+		r.Config.RedirectionURL,
+		r.Cm,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EncryptionKey,
+		redToAuth,
+		r.newOAuth2Config,
+		r.Store,
+		r.Config.AccessTokenDuration,
+	)
+
 	// step: add the routing for oauth
 	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
 		eng.HandleFunc(constant.AuthorizationURL, r.oauthAuthorizationHandler)
 		eng.Get(constant.CallbackURL, r.oauthCallbackHandler)
 		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
-		eng.With(r.authenticationMiddleware()).Get(constant.LogoutURL, r.logoutHandler)
-		eng.With(r.authenticationMiddleware()).Get(
+		eng.With(authMid).Get(constant.LogoutURL, r.logoutHandler)
+		eng.With(authMid).Get(
 			constant.TokenURL,
 			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
@@ -504,7 +539,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		)
 
 		middlewares := []func(http.Handler) http.Handler{
-			r.authenticationMiddleware(),
+			authMid,
 			admissionMiddleware(
 				r.Log,
 				res,
@@ -532,8 +567,32 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 		if r.Config.EnableUma || r.Config.EnableOpa {
 			middlewares = []func(http.Handler) http.Handler{
-				r.authenticationMiddleware(),
-				r.authorizationMiddleware(),
+				authMid,
+				authorizationMiddleware(
+					r.Log,
+					r.Config.EnableUma,
+					r.Config.EnableUmaMethodScope,
+					r.Config.CookieUMAName,
+					r.Config.NoProxy,
+					r.pat,
+					r.Provider,
+					r.IdpClient,
+					r.Config.OpenIDProviderTimeout,
+					r.Config.Realm,
+					r.Config.EnableEncryptedToken,
+					r.Config.ForceEncryptedCookie,
+					r.Config.EncryptionKey,
+					r.Cm,
+					r.Config.EnableOpa,
+					r.Config.OpaTimeout,
+					r.Config.OpaAuthzURL,
+					r.Config.DiscoveryURI,
+					r.Config.ClientID,
+					r.Config.SkipAccessTokenClientIDCheck,
+					r.Config.SkipAccessTokenIssuerCheck,
+					r.GetIdentity,
+					r.accessForbidden,
+				),
 				admissionMiddleware(
 					r.Log,
 					res,

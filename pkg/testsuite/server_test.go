@@ -982,6 +982,7 @@ func TestDefaultDenial(t *testing.T) {
 			Name: "TestDefaultDenialDisabled",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = false
+				conf.NoRedirects = true
 				conf.Resources = []*authorization.Resource{
 					{
 						URL:     "/",
@@ -994,6 +995,7 @@ func TestDefaultDenial(t *testing.T) {
 					URI:                     "/public/allowed",
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
+					Redirects:               false,
 					ExpectedContentContains: "gzip",
 				},
 				{
@@ -1474,28 +1476,60 @@ func TestTokenEncryption(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.EnableEncryptedToken = true
 	cfg.EncryptionKey = "US36S5kubc4BXbfzCIKTQcTzG6lvixVv"
-	requests := []fakeRequest{
+
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
 		{
-			URI:           "/auth_all/test",
-			HasLogin:      true,
-			ExpectedProxy: true,
-			Redirects:     true,
-			ExpectedProxyHeaders: map[string]string{
-				"X-Auth-Email":    "gambol99@gmail.com",
-				"X-Auth-Userid":   "rjayawardene",
-				"X-Auth-Username": "rjayawardene",
-				"X-Forwarded-For": "127.0.0.1",
+			Name: "TestNoRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = true
 			},
-			ExpectedCode: http.StatusOK,
+			ExecutionSettings: []fakeRequest{
+				// the token must be encrypted
+				{
+					URI:          "/auth_all/test",
+					HasToken:     true,
+					ExpectedCode: http.StatusUnauthorized,
+				},
+			},
 		},
-		// the token must be encrypted
 		{
-			URI:          "/auth_all/test",
-			HasToken:     true,
-			ExpectedCode: http.StatusUnauthorized,
+			Name: "TestRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/auth_all/test",
+					HasLogin:      true,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedProxyHeaders: map[string]string{
+						"X-Auth-Email":    "gambol99@gmail.com",
+						"X-Auth-Userid":   "rjayawardene",
+						"X-Auth-Username": "rjayawardene",
+						"X-Forwarded-For": "127.0.0.1",
+					},
+					ExpectedCode: http.StatusOK,
+				},
+			},
 		},
 	}
-	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, requests)
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		cfg := *cfg
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				testCase.ProxySettings(&cfg)
+				newFakeProxy(&cfg, &fakeAuthConfig{}).RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
 }
 
 func TestCustomResponseHeaders(t *testing.T) {
@@ -1524,29 +1558,25 @@ func TestSkipClientIDDisabled(t *testing.T) {
 	// !!!! Before in keycloak in audience of access_token was client_id of
 	// client for which was access token released, but this is not according spec
 	// as access_token could be also other type not just JWT
-	c := newFakeKeycloakConfig()
-	proxy := newFakeProxy(c, &fakeAuthConfig{})
+	cfg := newFakeKeycloakConfig()
+	proxySkipCheckFalse := newFakeProxy(cfg, &fakeAuthConfig{})
+
 	// create two token, one with a bad client id
-	bad := NewTestToken(proxy.idp.getLocation())
-	bad.Claims.Aud = "bad_client_id"
+	bad := NewTestToken(proxySkipCheckFalse.idp.getLocation())
+	iss := "bad_client_id"
+	bad.Claims.Aud = iss
 	badSigned, _ := bad.GetToken()
 	// and the good
-	good := NewTestToken(proxy.idp.getLocation())
+	good := NewTestToken(proxySkipCheckFalse.idp.getLocation())
 	goodSigned, _ := good.GetToken()
-	requests := []fakeRequest{
+
+	requestsSkipCheckFalse := []fakeRequest{
 		{
 			URI:               "/auth_all/test",
 			RawToken:          goodSigned,
 			ExpectedProxy:     true,
 			ExpectedCode:      http.StatusOK,
 			SkipClientIDCheck: false,
-		},
-		{
-			URI:               "/auth_all/test",
-			RawToken:          goodSigned,
-			ExpectedProxy:     true,
-			ExpectedCode:      http.StatusOK,
-			SkipClientIDCheck: true,
 		},
 		{
 			URI:               "/auth_all/test",
@@ -1555,6 +1585,29 @@ func TestSkipClientIDDisabled(t *testing.T) {
 			ExpectedProxy:     false,
 			SkipClientIDCheck: false,
 		},
+	}
+
+	proxySkipCheckFalse.RunTests(t, requestsSkipCheckFalse)
+
+	cfg = newFakeKeycloakConfig()
+	cfg.SkipAccessTokenClientIDCheck = true
+	proxySkipCheckTrue := newFakeProxy(cfg, &fakeAuthConfig{})
+	// create two token, one with a bad client id
+	bad = NewTestToken(proxySkipCheckTrue.idp.getLocation())
+	bad.Claims.Aud = iss
+	badSigned, _ = bad.GetToken()
+	// and the good
+	good = NewTestToken(proxySkipCheckTrue.idp.getLocation())
+	goodSigned, _ = good.GetToken()
+
+	requestsSkipCheckTrue := []fakeRequest{
+		{
+			URI:               "/auth_all/test",
+			RawToken:          goodSigned,
+			ExpectedProxy:     true,
+			ExpectedCode:      http.StatusOK,
+			SkipClientIDCheck: true,
+		},
 		{
 			URI:               "/auth_all/test",
 			RawToken:          badSigned,
@@ -1563,33 +1616,27 @@ func TestSkipClientIDDisabled(t *testing.T) {
 			SkipClientIDCheck: true,
 		},
 	}
-	proxy.RunTests(t, requests)
+	proxySkipCheckTrue.RunTests(t, requestsSkipCheckTrue)
 }
 
 func TestSkipIssuer(t *testing.T) {
-	c := newFakeKeycloakConfig()
-	proxy := newFakeProxy(c, &fakeAuthConfig{})
+	cfg := newFakeKeycloakConfig()
+	iss := "bad_issuer"
+	proxySkipFalse := newFakeProxy(cfg, &fakeAuthConfig{})
 	// create two token, one with a bad client id
-	bad := NewTestToken(proxy.idp.getLocation())
-	bad.Claims.Iss = "bad_issuer"
+	bad := NewTestToken(proxySkipFalse.idp.getLocation())
+	bad.Claims.Iss = iss
 	badSigned, _ := bad.GetToken()
 	// and the good
-	good := NewTestToken(proxy.idp.getLocation())
+	good := NewTestToken(proxySkipFalse.idp.getLocation())
 	goodSigned, _ := good.GetToken()
-	requests := []fakeRequest{
+	requestsSkipFalse := []fakeRequest{
 		{
 			URI:             "/auth_all/test",
 			RawToken:        goodSigned,
 			ExpectedProxy:   true,
 			ExpectedCode:    http.StatusOK,
 			SkipIssuerCheck: false,
-		},
-		{
-			URI:             "/auth_all/test",
-			RawToken:        goodSigned,
-			ExpectedProxy:   true,
-			ExpectedCode:    http.StatusOK,
-			SkipIssuerCheck: true,
 		},
 		{
 			URI:             "/auth_all/test",
@@ -1597,6 +1644,27 @@ func TestSkipIssuer(t *testing.T) {
 			ExpectedCode:    http.StatusForbidden,
 			ExpectedProxy:   false,
 			SkipIssuerCheck: false,
+		},
+	}
+	proxySkipFalse.RunTests(t, requestsSkipFalse)
+
+	cfg = newFakeKeycloakConfig()
+	cfg.SkipAccessTokenIssuerCheck = true
+	proxySkipTrue := newFakeProxy(cfg, &fakeAuthConfig{})
+	// create two token, one with a bad client id
+	bad = NewTestToken(proxySkipTrue.idp.getLocation())
+	bad.Claims.Iss = iss
+	badSigned, _ = bad.GetToken()
+	// and the good
+	good = NewTestToken(proxySkipTrue.idp.getLocation())
+	goodSigned, _ = good.GetToken()
+	requestsSkipTrue := []fakeRequest{
+		{
+			URI:             "/auth_all/test",
+			RawToken:        goodSigned,
+			ExpectedProxy:   true,
+			ExpectedCode:    http.StatusOK,
+			SkipIssuerCheck: true,
 		},
 		{
 			URI:             "/auth_all/test",
@@ -1606,7 +1674,7 @@ func TestSkipIssuer(t *testing.T) {
 			SkipIssuerCheck: true,
 		},
 	}
-	proxy.RunTests(t, requests)
+	proxySkipTrue.RunTests(t, requestsSkipTrue)
 }
 
 func TestAuthTokenHeaderEnabled(t *testing.T) {
@@ -1667,12 +1735,14 @@ func TestTLS(t *testing.T) {
 				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+"/gateadmin_priv_%d", rand.Intn(10000))
 				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_ca_%d", rand.Intn(10000))
 				conf.Listen = testProxyAddr
+				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{
 					URL:          fmt.Sprintf("https://%s/test", testProxyAddr),
 					ExpectedCode: http.StatusUnauthorized,
 					RequestCA:    fakeCA,
+					Redirects:    false,
 				},
 			},
 		},
@@ -1685,6 +1755,7 @@ func TestTLS(t *testing.T) {
 				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_ca_%d", rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.TLSMinVersion = "tlsv1.0"
+				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1692,6 +1763,7 @@ func TestTLS(t *testing.T) {
 					ExpectedCode: http.StatusUnauthorized,
 					RequestCA:    fakeCA,
 					TLSMin:       tls.VersionTLS10,
+					Redirects:    false,
 				},
 			},
 		},
@@ -1704,6 +1776,7 @@ func TestTLS(t *testing.T) {
 				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_ca_%d", rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.TLSMinVersion = "tlsv1.2"
+				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1711,6 +1784,7 @@ func TestTLS(t *testing.T) {
 					ExpectedCode: http.StatusUnauthorized,
 					RequestCA:    fakeCA,
 					TLSMin:       tls.VersionTLS13,
+					Redirects:    false,
 				},
 			},
 		},
@@ -1852,12 +1926,14 @@ func TestCustomHTTPMethod(t *testing.T) {
 			ProxySettings: func(c *config.Config) {
 				c.EnableDefaultDeny = true
 				c.CustomHTTPMethods = []string{"PROPFIND"} // WebDav method
+				c.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{
 					Method:        "PROPFIND",
 					URI:           "/api/test",
 					ExpectedProxy: false,
+					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
 					ExpectedContent: func(body string, testNum int) {
 						assert.Equal(t, "", body)
@@ -1918,6 +1994,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 			ProxySettings: func(c *config.Config) {
 				c.EnableDefaultDeny = true
 				c.CustomHTTPMethods = []string{"PROPFIND"} // WebDav method
+				c.NoRedirects = true
 				c.Resources = []*authorization.Resource{
 					{
 						URL:     "/webdav/*",
@@ -1930,6 +2007,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					Method:        "PROPFIND",
 					URI:           "/webdav/test",
 					ExpectedProxy: false,
+					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
 					ExpectedContent: func(body string, testNum int) {
 						assert.Equal(t, "", body)
