@@ -61,10 +61,10 @@ func (p *OpaAuthorizationProvider) Authorize() (AuthzDecision, error) {
 	defer cancel()
 
 	reqBody, err := io.ReadAll(p.req.Body)
-
 	if err != nil {
 		return DeniedAuthz, err
 	}
+	p.req.Body.Close()
 
 	opaReq := &OpaAuthzRequest{Input: &OpaInput{}}
 	opaReq.Input.Body = string(reqBody)
@@ -77,7 +77,6 @@ func (p *OpaAuthorizationProvider) Authorize() (AuthzDecision, error) {
 	opaReq.Input.UserAgent = p.req.UserAgent()
 
 	opaReqBody, err := json.Marshal(opaReq)
-
 	if err != nil {
 		return DeniedAuthz, err
 	}
@@ -87,7 +86,6 @@ func (p *OpaAuthorizationProvider) Authorize() (AuthzDecision, error) {
 		p.authzURL.String(),
 		bytes.NewReader(opaReqBody),
 	)
-
 	if err != nil {
 		return DeniedAuthz, err
 	}
@@ -99,19 +97,16 @@ func (p *OpaAuthorizationProvider) Authorize() (AuthzDecision, error) {
 	opaResp := &OpaAuthzResponse{}
 
 	resp, err := client.Do(httpReq)
-
 	if err != nil {
 		return DeniedAuthz, err
 	}
 
 	body, err := io.ReadAll(resp.Body)
-
 	if err != nil {
 		return DeniedAuthz, err
 	}
 
 	err = json.Unmarshal(body, opaResp)
-
 	if err != nil {
 		return DeniedAuthz, err
 	}

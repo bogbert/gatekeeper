@@ -37,7 +37,6 @@ func TestExternalOpa(t *testing.T) {
 					Name: "Test",
 				}
 				reqBody, err := json.Marshal(testInput)
-
 				if err != nil {
 					return nil, err
 				}
@@ -47,7 +46,6 @@ func TestExternalOpa(t *testing.T) {
 					"dummy",
 					bytes.NewReader(reqBody),
 				)
-
 				if err != nil {
 					return nil, err
 				}
@@ -74,7 +72,6 @@ func TestExternalOpa(t *testing.T) {
 					Name: "Test",
 				}
 				reqBody, err := json.Marshal(testInput)
-
 				if err != nil {
 					return nil, err
 				}
@@ -84,7 +81,6 @@ func TestExternalOpa(t *testing.T) {
 					"dummy",
 					bytes.NewReader(reqBody),
 				)
-
 				if err != nil {
 					return nil, err
 				}
@@ -111,7 +107,6 @@ func TestExternalOpa(t *testing.T) {
 					Name: "Test",
 				}
 				reqBody, err := json.Marshal(testInput)
-
 				if err != nil {
 					return nil, err
 				}
@@ -121,7 +116,6 @@ func TestExternalOpa(t *testing.T) {
 					"dummy",
 					bytes.NewReader(reqBody),
 				)
-
 				if err != nil {
 					return nil, err
 				}
@@ -140,7 +134,6 @@ func TestExternalOpa(t *testing.T) {
 					Name: "Test",
 				}
 				reqBody, err := json.Marshal(testInput)
-
 				if err != nil {
 					return nil, err
 				}
@@ -150,7 +143,6 @@ func TestExternalOpa(t *testing.T) {
 					"dummy",
 					bytes.NewReader(reqBody),
 				)
-
 				if err != nil {
 					return nil, err
 				}
@@ -169,7 +161,6 @@ func TestExternalOpa(t *testing.T) {
 					Name: "Test",
 				}
 				reqBody, err := yaml.Marshal(testInput)
-
 				if err != nil {
 					return nil, err
 				}
@@ -179,7 +170,6 @@ func TestExternalOpa(t *testing.T) {
 					"dummy",
 					bytes.NewReader(reqBody),
 				)
-
 				if err != nil {
 					return nil, err
 				}
@@ -206,7 +196,6 @@ func TestExternalOpa(t *testing.T) {
 					Name: "Test",
 				}
 				reqBody, err := yaml.Marshal(testInput)
-
 				if err != nil {
 					return nil, err
 				}
@@ -216,7 +205,6 @@ func TestExternalOpa(t *testing.T) {
 					"dummy",
 					bytes.NewReader(reqBody),
 				)
-
 				if err != nil {
 					return nil, err
 				}

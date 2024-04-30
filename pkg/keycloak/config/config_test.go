@@ -1383,6 +1383,53 @@ func TestIsUpstreamValid(t *testing.T) {
 	}
 }
 
+func TestIsUpstreamProxyValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidUpstream",
+			Config: &Config{
+				UpstreamProxy: "http://aklsdsdo",
+			},
+			Valid: true,
+		},
+		{
+			Name: "ValidUpstreamEmpty",
+			Config: &Config{
+				UpstreamProxy: "",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InValidUpstreamInvalidURI",
+			Config: &Config{
+				UpstreamProxy: "asas",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isUpstreamProxyValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
 func TestIsClientIDValid(t *testing.T) {
 	testCases := []struct {
 		Name   string
@@ -1969,6 +2016,17 @@ func TestExternalAuthzValid(t *testing.T) {
 				NoRedirects:  true,
 			},
 			Valid: true,
+		},
+		{
+			Name: "ConflictIdpSessionCheckEnableUma",
+			Config: &Config{
+				EnableUma:             true,
+				ClientID:              "test",
+				ClientSecret:          "test",
+				NoRedirects:           true,
+				EnableIDPSessionCheck: true,
+			},
+			Valid: false,
 		},
 		{
 			Name: "MissingClientID",

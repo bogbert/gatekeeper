@@ -27,12 +27,13 @@ import (
 
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetUserinfo(t *testing.T) {
 	proxy, idp, _ := newTestProxyService(nil)
 	token, err := NewTestToken(idp.getLocation()).GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	tokenSource := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -41,12 +42,12 @@ func TestGetUserinfo(t *testing.T) {
 	defer cancel()
 
 	userInfo, err := proxy.Provider.UserInfo(ctx, tokenSource)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	claims := DefaultTestTokenClaims{}
 	err = userInfo.Claims(&claims)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEqual(t, (DefaultTestTokenClaims{}), claims)
 }
 

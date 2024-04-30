@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"go.uber.org/zap/zapcore"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -75,19 +77,17 @@ func init() {
 // NewProxy create's a new proxy from configuration
 //
 //nolint:cyclop
-func NewProxy(config *config.Config, log *zap.Logger) (*OauthProxy, error) {
+func NewProxy(config *config.Config, log *zap.Logger, upstream reverseProxy) (*OauthProxy, error) {
 	var err error
 	// create the service logger
 	if log == nil {
 		log, err = createLogger(config)
-
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	err = config.Update()
-
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +151,10 @@ func NewProxy(config *config.Config, log *zap.Logger) (*OauthProxy, error) {
 			"client credentials are not set, depending on " +
 				"provider (confidential|public) you might be unable to auth",
 		)
+	}
+
+	if upstream != nil {
+		svc.Upstream = upstream
 	}
 
 	// are we running in forwarding mode?
@@ -283,8 +287,10 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		zap.String("url", r.Config.Upstream),
 	)
 
-	if err := r.createUpstreamProxy(r.Endpoint); err != nil {
-		return err
+	if r.Upstream == nil {
+		if err := r.createUpstreamProxy(r.Endpoint); err != nil {
+			return err
+		}
 	}
 
 	engine := chi.NewRouter()
@@ -364,8 +370,16 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		engine.Use(corsHandler.Handler)
 	}
 
+	proxyMiddle := proxyMiddleware(
+		r.Log,
+		r.Config.CorsOrigins,
+		r.Config.Headers,
+		r.Endpoint,
+		r.Config.PreserveHost,
+		r.Upstream,
+	)
 	if !r.Config.NoProxy {
-		engine.Use(r.proxyMiddleware)
+		engine.Use(proxyMiddle)
 	}
 
 	r.Router = engine
@@ -424,18 +438,98 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.AccessTokenDuration,
 	)
 
+	loginHand := loginHandler(
+		r.Log,
+		r.Config.OpenIDProviderTimeout,
+		r.IdpClient,
+		r.Config.EnableLoginHandler,
+		r.newOAuth2Config,
+		r.getRedirectionURL,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EncryptionKey,
+		r.Config.EnableRefreshTokens,
+		r.Config.EnableIDTokenCookie,
+		r.Cm,
+		r.Config.AccessTokenDuration,
+		r.Store,
+	)
+
+	logoutHand := logoutHandler(
+		r.Log,
+		r.Config.PostLogoutRedirectURI,
+		r.Config.RedirectionURL,
+		r.Config.DiscoveryURL,
+		r.Config.RevocationEndpoint,
+		r.Config.CookieAccessName,
+		r.Config.CookieIDTokenName,
+		r.Config.CookieRefreshName,
+		r.Config.ClientID,
+		r.Config.ClientSecret,
+		r.Config.EncryptionKey,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EnableLogoutRedirect,
+		r.Store,
+		r.Cm,
+		r.IdpClient,
+		r.accessError,
+		r.GetIdentity,
+	)
+
+	oauthCallbackHand := oauthCallbackHandler(
+		r.Log,
+		r.Config.ClientID,
+		r.Config.Realm,
+		r.Config.CookiePKCEName,
+		r.Config.CookieRequestURIName,
+		r.Config.PostLoginRedirectPath,
+		r.Config.EncryptionKey,
+		r.Config.SkipTokenVerification,
+		r.Config.SkipAccessTokenClientIDCheck,
+		r.Config.SkipAccessTokenIssuerCheck,
+		r.Config.EnableRefreshTokens,
+		r.Config.EnableUma,
+		r.Config.EnableUmaMethodScope,
+		r.Config.EnableIDTokenCookie,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EnablePKCE,
+		r.Provider,
+		r.Cm,
+		r.pat,
+		r.IdpClient,
+		r.Store,
+		r.newOAuth2Config,
+		r.getRedirectionURL,
+		r.accessForbidden,
+		r.accessError,
+	)
+
+	oauthAuthorizationHand := oauthAuthorizationHandler(
+		r.Log,
+		r.Config.SkipTokenVerification,
+		r.Config.Scopes,
+		r.Config.EnablePKCE,
+		r.Config.SignInPage,
+		r.Cm,
+		r.newOAuth2Config,
+		r.getRedirectionURL,
+		r.customSignInPage,
+	)
+
 	// step: add the routing for oauth
 	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
-		eng.HandleFunc(constant.AuthorizationURL, r.oauthAuthorizationHandler)
-		eng.Get(constant.CallbackURL, r.oauthCallbackHandler)
+		eng.HandleFunc(constant.AuthorizationURL, oauthAuthorizationHand)
+		eng.Get(constant.CallbackURL, oauthCallbackHand)
 		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
-		eng.With(authMid).Get(constant.LogoutURL, r.logoutHandler)
+		eng.With(authMid).Get(constant.LogoutURL, logoutHand)
 		eng.With(authMid).Get(
 			constant.TokenURL,
 			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
-		eng.Post(constant.LoginURL, r.loginHandler)
+		eng.Post(constant.LoginURL, loginHand)
 		eng.Get(constant.DiscoveryURL, discoveryHandler(r.Log, r.WithOAuthURI))
 
 		if r.Config.ListenAdmin == "" {
@@ -665,7 +759,15 @@ func (r *OauthProxy) createForwardingProxy() error {
 		return err
 	}
 	//nolint:bodyclose
-	forwardingHandler := r.forwardProxyHandler()
+	forwardingHandler := forwardProxyHandler(
+		r.Log,
+		r.pat,
+		r.rpt,
+		r.Config.EnableUma,
+		r.Config.ForwardingDomains,
+		r.Config.EnableHmac,
+		r.Config.EncryptionKey,
+	)
 
 	// set the http handler
 	proxy, assertOk := r.Upstream.(*goproxy.ProxyHttpServer)
@@ -1159,7 +1261,6 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	// and for refreshed cookies (htts://github.com/louketo/louketo-proxy/pulls/456])
 	proxy.KeepDestinationHeaders = true
 	proxy.Logger = httplog.New(io.Discard, "", 0)
-	proxy.KeepDestinationHeaders = true
 	r.Upstream = proxy
 
 	// update the tls configuration of the reverse proxy
@@ -1169,8 +1270,22 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		return apperrors.ErrAssertionFailed
 	}
 
+	var upstreamProxyFunc func(*http.Request) (*url.URL, error)
+	if r.Config.UpstreamProxy != "" {
+		prConfig := httpproxy.Config{
+			HTTPProxy:  r.Config.UpstreamProxy,
+			HTTPSProxy: r.Config.UpstreamProxy,
+		}
+		if r.Config.UpstreamNoProxy != "" {
+			prConfig.NoProxy = r.Config.UpstreamNoProxy
+		}
+		upstreamProxyFunc = func(req *http.Request) (*url.URL, error) {
+			return prConfig.ProxyFunc()(req.URL)
+		}
+	}
 	upstreamProxy.Tr = &http.Transport{
 		Dial:                  dialer,
+		Proxy:                 upstreamProxyFunc,
 		DisableKeepAlives:     !r.Config.UpstreamKeepalives,
 		ExpectContinueTimeout: r.Config.UpstreamExpectContinueTimeout,
 		ResponseHeaderTimeout: r.Config.UpstreamResponseHeaderTimeout,

@@ -28,6 +28,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetIndentity(t *testing.T) {
@@ -132,7 +133,7 @@ func TestGetIndentity(t *testing.T) {
 
 		p, idp, _ := newTestProxyService(cfg)
 		token, err := NewTestToken(idp.getLocation()).GetToken()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		user, err := p.GetIdentity(testCase.Request(token), cfg.CookieAccessName, "")
 
@@ -159,7 +160,7 @@ func TestGetIndentity(t *testing.T) {
 func TestGetTokenInRequest(t *testing.T) {
 	defaultName := config.NewDefaultConfig().CookieAccessName
 	token, err := NewTestToken("test").GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	testCases := []struct {
 		Token                           string
 		AuthScheme                      string
@@ -232,7 +233,7 @@ func TestGetTokenInRequest(t *testing.T) {
 		access, bearer, err := utils.GetTokenInRequest(req, defaultName, testCase.SkipAuthorizationHeaderIdentity, "")
 		switch testCase.Error {
 		case nil:
-			assert.NoError(t, err, "case %d should not have thrown an error", idx)
+			require.NoError(t, err, "case %d should not have thrown an error", idx)
 			assert.Equal(t, testCase.AuthScheme == "Bearer", bearer)
 			assert.Equal(t, token, access)
 		default:
@@ -258,11 +259,11 @@ func TestGetUserContext(t *testing.T) {
 	token.addRealmRoles(realmRoles)
 	token.addClientRoles("client", []string{"client"})
 	jwtToken, err := token.GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	context, err := proxy.ExtractIdentity(webToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, context)
 	assert.Equal(t, "1e11e539-8256-4b3b-bda8-cc0d56cddb48", context.ID)
 	assert.Equal(t, "gambol99@gmail.com", context.Email)
@@ -275,11 +276,11 @@ func TestGetUserRealmRoleContext(t *testing.T) {
 	token := NewTestToken("test")
 	token.addRealmRoles(roles)
 	jwtToken, err := token.GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	context, err := proxy.ExtractIdentity(webToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, context)
 	assert.Equal(t, "1e11e539-8256-4b3b-bda8-cc0d56cddb48", context.ID)
 	assert.Equal(t, "gambol99@gmail.com", context.Email)
@@ -292,11 +293,11 @@ func TestGetUserRealmRoleContext(t *testing.T) {
 func TestUserContextString(t *testing.T) {
 	token := NewTestToken("test")
 	jwtToken, err := token.GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	context, err := proxy.ExtractIdentity(webToken)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, context)
 	assert.NotEmpty(t, context.String())
 }

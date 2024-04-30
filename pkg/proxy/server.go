@@ -31,12 +31,12 @@ func ProduceProxy(cfg configcore.Configs) (proxycore.OauthProxies, error) {
 		if !ok {
 			panic("unexpected assertion problem")
 		}
-		return keycloakproxy.NewProxy(c, nil)
+		return keycloakproxy.NewProxy(c, nil, nil)
 	default:
 		c, ok := cfg.(*keycloakconfig.Config)
 		if !ok {
 			panic("unexpected assertion problem")
 		}
-		return keycloakproxy.NewProxy(c, nil)
+		return keycloakproxy.NewProxy(c, nil, nil)
 	}
 }

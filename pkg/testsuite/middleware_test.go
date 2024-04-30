@@ -192,9 +192,9 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12301"
 				conf.ListenAdminScheme = constant.SecureScheme
-				conf.TLSAdminCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_crt_%d", rand.Intn(10000))
-				conf.TLSAdminPrivateKey = fmt.Sprintf(os.TempDir()+"/gateadmin_priv_%d", rand.Intn(10000))
-				conf.TLSAdminCaCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_ca_%d", rand.Intn(10000))
+				conf.TLSAdminCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSAdminPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSAdminCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -218,9 +218,9 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12302"
 				conf.ListenAdminScheme = constant.SecureScheme
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_crt_%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+"/gateadmin_priv_%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+"/gateadmin_ca_%d", rand.Intn(10000))
+				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -407,7 +407,7 @@ func TestPreserveURLEncoding(t *testing.T) {
 
 	requests := []fakeRequest{
 		{
-			URI:          "/test",
+			URI:          FakeTestURL,
 			HasToken:     true,
 			Roles:        []string{"nothing"},
 			ExpectedCode: http.StatusForbidden,
@@ -752,7 +752,7 @@ func TestWhiteListedRequests(t *testing.T) {
 			Redirects:     false,
 		},
 		{
-			URI:          "/test",
+			URI:          FakeTestURL,
 			HasToken:     true,
 			Roles:        []string{"nothing"},
 			ExpectedCode: http.StatusForbidden,
@@ -1240,14 +1240,14 @@ func TestRolePermissionsMiddleware(t *testing.T) {
 					ExpectedCode: http.StatusForbidden,
 				},
 				{ // token, wrong roles
-					URI:          "/test",
+					URI:          FakeTestURL,
 					Redirects:    false,
 					HasToken:     true,
 					Roles:        []string{"bad_role"},
 					ExpectedCode: http.StatusForbidden,
 				},
 				{ // token, but post method
-					URI:           "/test",
+					URI:           FakeTestURL,
 					Method:        http.MethodPost,
 					Redirects:     false,
 					HasToken:      true,
@@ -1256,7 +1256,7 @@ func TestRolePermissionsMiddleware(t *testing.T) {
 					ExpectedProxy: true,
 				},
 				{ // check with correct token
-					URI:           "/test",
+					URI:           FakeTestURL,
 					Redirects:     false,
 					HasToken:      true,
 					Roles:         []string{FakeTestRole},
@@ -1902,12 +1902,12 @@ func TestAdmissionHandlerRoles(t *testing.T) {
 	cfg.NoRedirects = true
 	cfg.Resources = []*authorization.Resource{
 		{
-			URL:     "/admin",
+			URL:     FakeAdminURL,
 			Methods: utils.AllHTTPMethods,
 			Roles:   []string{"admin"},
 		},
 		{
-			URL:     "/test",
+			URL:     FakeTestURL,
 			Methods: []string{"GET"},
 			Roles:   []string{"test"},
 		},
@@ -1923,20 +1923,20 @@ func TestAdmissionHandlerRoles(t *testing.T) {
 	}
 	requests := []fakeRequest{
 		{
-			URI:          "/admin",
+			URI:          FakeAdminURL,
 			Roles:        []string{},
 			HasToken:     true,
 			ExpectedCode: http.StatusForbidden,
 		},
 		{
-			URI:           "/admin",
+			URI:           FakeAdminURL,
 			Roles:         []string{"admin"},
 			HasToken:      true,
 			ExpectedProxy: true,
 			ExpectedCode:  http.StatusOK,
 		},
 		{
-			URI:           "/test",
+			URI:           FakeTestURL,
 			Roles:         []string{"test"},
 			HasToken:      true,
 			ExpectedProxy: true,
@@ -2210,14 +2210,15 @@ func TestGzipCompression(t *testing.T) {
 			ProxySettings: func(c *config.Config) {
 				c.EnableCompression = true
 				c.EnableLogging = true
+				c.Upstream = server.URL
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URL:                     server.URL + "/test",
+					URI:                     FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
-					ExpectedContentContains: "/test",
+					ExpectedContentContains: FakeTestURL,
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip, deflate, br",
 					},
@@ -2301,7 +2302,7 @@ func TestEnableUma(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
@@ -2324,7 +2325,7 @@ func TestEnableUma(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:                "/test",
+					URI:                FakeTestURL,
 					ExpectedProxy:      false,
 					HasToken:           true,
 					ExpectedCode:       http.StatusForbidden,
@@ -2350,7 +2351,7 @@ func TestEnableUma(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
@@ -2383,7 +2384,7 @@ func TestEnableUma(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
@@ -2416,7 +2417,7 @@ func TestEnableUma(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
@@ -2501,8 +2502,7 @@ func TestLogRealIP(t *testing.T) {
 		cfg.DiscoveryURL = auth.getLocation()
 		_ = cfg.Update()
 
-		proxy, _ := proxy.NewProxy(cfg, testLog)
-		proxy.Upstream = &FakeUpstreamService{}
+		proxy, _ := proxy.NewProxy(cfg, testLog, &FakeUpstreamService{})
 		_ = proxy.Run()
 
 		cfg.RedirectionURL = fmt.Sprintf("http://%s", proxy.Listener.Addr().String())
@@ -2532,6 +2532,9 @@ func TestLogRealIP(t *testing.T) {
 
 //nolint:funlen
 func TestEnableOpa(t *testing.T) {
+	upstreamService := httptest.NewServer(&FakeUpstreamService{})
+	upstreamURL := upstreamService.URL
+
 	requests := []struct {
 		Name              string
 		ProxySettings     func(c *config.Config)
@@ -2547,17 +2550,23 @@ func TestEnableOpa(t *testing.T) {
 				conf.OpaTimeout = 60 * time.Second
 				conf.ClientID = ValidUsername
 				conf.ClientSecret = ValidPassword
+				conf.Upstream = upstreamURL
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: true,
-					HasToken:      true,
-					Redirects:     false,
-					ExpectedCode:  http.StatusOK,
+					Method:        "POST",
+					FormValues: map[string]string{
+						"Name": "Whatever",
+					},
+					HasToken:     true,
+					Redirects:    false,
+					ExpectedCode: http.StatusOK,
 					ExpectedContent: func(body string, testNum int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
+						assert.Contains(t, body, "Whatever")
 					},
 				},
 			},
@@ -2567,8 +2576,9 @@ func TestEnableOpa(t *testing.T) {
 			default allow := false
 
 			allow {
-				input.method = "GET"
-				input.path = "/test"
+				input.method = "POST"
+				input.path = FakeTestURL
+				contains(input.body, "Whatever")
 			}
 			`,
 			StartOpa: true,
@@ -2584,7 +2594,7 @@ func TestEnableOpa(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: false,
 					HasToken:      true,
 					Redirects:     false,
@@ -2601,7 +2611,7 @@ func TestEnableOpa(t *testing.T) {
 
 			allow {
 				input.method = "GETTT"
-				input.path = "/test"
+				input.path = FakeTestURL
 			}
 			`,
 			StartOpa: true,
@@ -2617,7 +2627,7 @@ func TestEnableOpa(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: false,
 					HasToken:      true,
 					Redirects:     false,
@@ -2641,7 +2651,7 @@ func TestEnableOpa(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: false,
 					HasToken:      true,
 					Redirects:     false,
@@ -2665,7 +2675,7 @@ func TestEnableOpa(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: false,
 					HasToken:      true,
 					Redirects:     true,
@@ -2691,7 +2701,7 @@ func TestEnableOpa(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: false,
 					HasToken:      true,
 					Redirects:     true,
@@ -2715,7 +2725,7 @@ func TestEnableOpa(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: true,
 					HasLogin:      true,
 					OnResponse:    delay,
@@ -2727,7 +2737,7 @@ func TestEnableOpa(t *testing.T) {
 					},
 				},
 				{
-					URI:           "/test",
+					URI:           FakeTestURL,
 					ExpectedProxy: true,
 					HasLogin:      false,
 					Redirects:     false,
@@ -2745,7 +2755,7 @@ func TestEnableOpa(t *testing.T) {
 
 			allow {
 				input.method = "GET"
-				input.path = "/test"
+				input.path = FakeTestURL
 			}
 			`,
 			StartOpa: true,

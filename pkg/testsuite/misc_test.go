@@ -25,6 +25,7 @@ import (
 
 	keycloakproxy "github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedirectToAuthorizationUnauthorized(t *testing.T) {
@@ -32,7 +33,7 @@ func TestRedirectToAuthorizationUnauthorized(t *testing.T) {
 	cfg.NoRedirects = true
 	requests := []fakeRequest{
 		{
-			URI:          "/admin",
+			URI:          FakeAdminURL,
 			ExpectedCode: http.StatusUnauthorized,
 			Redirects:    false,
 		},
@@ -43,7 +44,7 @@ func TestRedirectToAuthorizationUnauthorized(t *testing.T) {
 func TestRedirectToAuthorization(t *testing.T) {
 	requests := []fakeRequest{
 		{
-			URI:              "/admin",
+			URI:              FakeAdminURL,
 			Redirects:        true,
 			ExpectedLocation: "/oauth/authorize?state",
 			ExpectedCode:     http.StatusSeeOther,
@@ -57,7 +58,7 @@ func TestRedirectToAuthorizationWith303Enabled(t *testing.T) {
 
 	requests := []fakeRequest{
 		{
-			URI:              "/admin",
+			URI:              FakeAdminURL,
 			Redirects:        true,
 			ExpectedLocation: "/oauth/authorize?state",
 			ExpectedCode:     http.StatusSeeOther,
@@ -69,7 +70,7 @@ func TestRedirectToAuthorizationWith303Enabled(t *testing.T) {
 func TestRedirectToAuthorizationSkipToken(t *testing.T) {
 	requests := []fakeRequest{
 		{
-			URI:          "/admin",
+			URI:          FakeAdminURL,
 			ExpectedCode: http.StatusUnauthorized,
 			Redirects:    false,
 		},
@@ -85,12 +86,12 @@ func assertAlmostEquals(t *testing.T, expected time.Duration, actual time.Durati
 	if delta < 0 {
 		delta = -delta
 	}
-	assert.True(t, delta < time.Duration(1)*time.Minute, "Diff should be less than a minute but delta is %s", delta)
+	assert.Less(t, delta, time.Duration(1)*time.Minute, "Diff should be less than a minute but delta is %s", delta)
 }
 
 func TestGetAccessCookieExpiration_NoExp(t *testing.T) {
 	token, err := NewTestToken("foo").GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
@@ -102,12 +103,12 @@ func TestGetAccessCookieExpiration_ZeroExp(t *testing.T) {
 	ft := NewTestToken("foo")
 	ft.SetExpiration(time.Unix(0, 0))
 	token, err := ft.GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
 	duration := keycloakproxy.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
-	assert.True(t, duration > 0, "duration should be positive")
+	assert.Greater(t, duration, 0*time.Second, "duration should be positive")
 	assertAlmostEquals(t, c.AccessTokenDuration, duration)
 }
 
@@ -115,7 +116,7 @@ func TestGetAccessCookieExpiration_PastExp(t *testing.T) {
 	ft := NewTestToken("foo")
 	ft.SetExpiration(time.Now().AddDate(-1, 0, 0))
 	token, err := ft.GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
@@ -126,7 +127,7 @@ func TestGetAccessCookieExpiration_PastExp(t *testing.T) {
 func TestGetAccessCookieExpiration_ValidExp(t *testing.T) {
 	fToken := NewTestToken("foo")
 	token, err := fToken.GetToken()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy

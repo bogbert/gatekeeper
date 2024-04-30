@@ -75,6 +75,10 @@ type Config struct {
 	OpenIDProviderRetryCount int `env:"OPENID_PROVIDER_RETRY_COUNT" json:"openid-provider-retry-count" usage:"number of retries for retrieving openid configuration" yaml:"openid-provider-retry-count"`
 	// OpenIDProviderHeaders
 	OpenIDProviderHeaders map[string]string `json:"openid-provider-headers" usage:"http headers sent to idp provider" yaml:"openid-provider-headers"`
+	// UpstreamProxy proxy for upstream communication
+	UpstreamProxy string `env:"UPSTREAM_PROXY" json:"upstream-proxy" usage:"proxy for communication with upstream" yaml:"upstream-proxy"`
+	// UpstreamNoProxy list of upstream destinations which should be not proxied
+	UpstreamNoProxy string `env:"UPSTREAM_NO_PROXY" json:"upstream-no-proxy" usage:"list of upstream destinations which should be not proxied" yaml:"upstream-no-proxy"`
 	// BaseURI is prepended to all the generated URIs
 	BaseURI string `env:"BASE_URI" json:"base-uri" usage:"common prefix for all URIs" yaml:"base-uri"`
 	// OAuthURI is the uri for the oauth endpoints for the proxy
@@ -455,6 +459,7 @@ func (r *Config) IsValid() error {
 		r.isAdminTLSFilesValid,
 		r.isLetsEncryptValid,
 		r.isTLSMinValid,
+		r.isUpstreamProxyValid,
 		r.isForwardingProxySettingsValid,
 		r.isReverseProxySettingsValid,
 	}
@@ -622,6 +627,15 @@ func (r *Config) isTLSMinValid() error {
 	case "tlsv1.3":
 	default:
 		return apperrors.ErrInvalidMinimalTLSVersion
+	}
+	return nil
+}
+
+func (r *Config) isUpstreamProxyValid() error {
+	if r.UpstreamProxy != "" {
+		if _, err := url.ParseRequestURI(r.UpstreamProxy); err != nil {
+			return fmt.Errorf("the upstream proxy is invalid, %s", err)
+		}
 	}
 	return nil
 }
@@ -887,6 +901,9 @@ func (r *Config) isExternalAuthzValid() error {
 	if r.EnableUma {
 		if r.ClientID == "" || r.ClientSecret == "" {
 			return apperrors.ErrMissingClientCredsWithUMA
+		}
+		if r.EnableIDPSessionCheck && r.NoRedirects {
+			return apperrors.ErrEnableUmaIdpSessionCheckConflict
 		}
 	} else if r.EnableOpa {
 		authzURL, err := url.ParseRequestURI(r.OpaAuthzURI)

@@ -16,12 +16,15 @@ limitations under the License.
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +83,7 @@ func entrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			// @metric record the time taken then response code
 			metrics.LatencyMetric.Observe(time.Since(start).Seconds())
-			metrics.StatusMetric.WithLabelValues(fmt.Sprintf("%d", resp.Status()), req.Method).Inc()
+			metrics.StatusMetric.WithLabelValues(strconv.Itoa(resp.Status()), req.Method).Inc()
 
 			// place back the original uri for any later consumers
 			req.URL.Path = scope.Path
@@ -206,8 +209,7 @@ func authenticationMiddleware(
 			user, err := getIdentity(req, cookieAccessName, "")
 			if err != nil {
 				scope.Logger.Error(err.Error())
-				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
+				redirectToAuthorization(wrt, req)
 				return
 			}
 
@@ -236,8 +238,7 @@ func authenticationMiddleware(
 				_, err := provider.UserInfo(oidcLibCtx, tokenSource)
 				if err != nil {
 					scope.Logger.Error(err.Error())
-					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
+					redirectToAuthorization(wrt, req)
 					return
 				}
 			}
@@ -251,8 +252,7 @@ func authenticationMiddleware(
 
 				if user.IsExpired() {
 					lLog.Error(apperrors.ErrSessionExpiredVerifyOff.Error())
-					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
+					redirectToAuthorization(wrt, req)
 					return
 				}
 			} else { //nolint:gocritic
@@ -270,8 +270,7 @@ func authenticationMiddleware(
 							apperrors.ErrAccTokenVerifyFailure.Error(),
 							zap.Error(err),
 						)
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 
@@ -280,15 +279,13 @@ func authenticationMiddleware(
 							apperrors.ErrAccTokenVerifyFailure.Error(),
 							zap.Error(err),
 						)
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 
 					if !enableRefreshTokens {
 						lLog.Error(apperrors.ErrSessionExpiredRefreshOff.Error())
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
+						redirectToAuthorization(wrt, req)
 						return
 					}
 
@@ -307,8 +304,7 @@ func authenticationMiddleware(
 							apperrors.ErrRefreshTokenNotFound.Error(),
 							zap.Error(err),
 						)
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
+						redirectToAuthorization(wrt, req)
 						return
 					}
 
@@ -319,8 +315,7 @@ func authenticationMiddleware(
 							apperrors.ErrParseRefreshToken.Error(),
 							zap.Error(err),
 						)
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 					if user.ID != stdRefreshClaims.Subject {
@@ -328,8 +323,7 @@ func authenticationMiddleware(
 							apperrors.ErrAccRefreshTokenMismatch.Error(),
 							zap.Error(err),
 						)
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 
@@ -366,8 +360,7 @@ func authenticationMiddleware(
 							)
 						}
 
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(redirectToAuthorization(wrt, req)))
+						redirectToAuthorization(wrt, req)
 						return
 					}
 
@@ -402,8 +395,7 @@ func authenticationMiddleware(
 								apperrors.ErrEncryptAccToken.Error(),
 								zap.Error(err),
 							)
-							//nolint:contextcheck
-							next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+							accessForbidden(wrt, req)
 							return
 						}
 					}
@@ -415,8 +407,7 @@ func authenticationMiddleware(
 					newUser, err := ExtractIdentity(&newAccToken)
 					if err != nil {
 						lLog.Error(err.Error())
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 
@@ -469,7 +460,8 @@ func authenticationMiddleware(
 				}
 			}
 
-			next.ServeHTTP(wrt, req.WithContext(ctx))
+			*req = *(req.WithContext(ctx))
+			next.ServeHTTP(wrt, req)
 		})
 	}
 }
@@ -528,16 +520,15 @@ func authorizationMiddleware(
 			if enableUma {
 				var methodScope *string
 				if enableUmaMethodScope {
-					methSc := "method:" + req.Method
+					methSc := constant.UmaMethodScope + req.Method
 					if noProxy {
 						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
 						if xForwardedMethod == "" {
 							scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
-							//nolint:contextcheck
-							next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+							accessForbidden(wrt, req)
 							return
 						}
-						methSc = "method:" + xForwardedMethod
+						methSc = constant.UmaMethodScope + xForwardedMethod
 					}
 					methodScope = &methSc
 				}
@@ -547,8 +538,7 @@ func authorizationMiddleware(
 					authzPath = req.Header.Get("X-Forwarded-URI")
 					if authzPath == "" {
 						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 				}
@@ -603,8 +593,7 @@ func authorizationMiddleware(
 						if enableEncryptedToken || forceEncryptedCookie {
 							if umaToken, err = encryption.EncodeText(umaToken, encryptionKey); err != nil {
 								scope.Logger.Error(err.Error())
-								//nolint:contextcheck
-								next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+								accessForbidden(wrt, req)
 								return
 							}
 						}
@@ -616,12 +605,29 @@ func authorizationMiddleware(
 					}
 				}
 			} else if enableOpa {
-				provider = authorization.NewOpaAuthorizationProvider(
-					opaTimeout,
-					*opaAuthzURL,
-					req,
-				)
-				decision, err = provider.Authorize()
+				// initially request Body is stream read from network connection,
+				// when read once, it is closed, so second time we would not be able to
+				// read it, so what we will do here is that we will read body,
+				// create copy of original request and pass body which we already read
+				// to original req and to new copy of request,
+				// new copy will be passed to authorizer, which also needs to read body
+				reqBody, varErr := io.ReadAll(req.Body)
+				if varErr != nil {
+					decision = authorization.DeniedAuthz
+					err = varErr
+				} else {
+					req.Body.Close()
+					passReq := *req
+					passReq.Body = io.NopCloser(bytes.NewReader(reqBody))
+					req.Body = io.NopCloser(bytes.NewReader(reqBody))
+
+					provider = authorization.NewOpaAuthorizationProvider(
+						opaTimeout,
+						*opaAuthzURL,
+						&passReq,
+					)
+					decision, err = provider.Authorize()
+				}
 			}
 
 			switch err {
@@ -649,8 +655,7 @@ func authorizationMiddleware(
 					prv, ok := provider.(*authorization.KeycloakAuthorizationProvider)
 					if !ok {
 						scope.Logger.Error(apperrors.ErrAssertionFailed.Error())
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 
@@ -668,11 +673,9 @@ func authorizationMiddleware(
 						wrt.Header().Add(constant.UMATicketHeader, permHeader)
 					}
 				}
-				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+				accessForbidden(wrt, req)
 				return
 			}
-
 			next.ServeHTTP(wrt, req)
 		})
 	}
@@ -801,8 +804,7 @@ func admissionMiddleware(
 			if !utils.HasAccess(resource.Roles, user.Roles, !resource.RequireAnyRole) {
 				lLog.Warn("access denied, invalid roles",
 					zap.String("roles", resource.GetRoles()))
-				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+				accessForbidden(wrt, req)
 				return
 			}
 
@@ -817,9 +819,7 @@ func admissionMiddleware(
 					if !ok {
 						lLog.Warn("access denied, invalid headers",
 							zap.String("headers", resource.GetHeaders()))
-
-						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+						accessForbidden(wrt, req)
 						return
 					}
 
@@ -837,9 +837,7 @@ func admissionMiddleware(
 				if !utils.HasAccess(resource.Headers, reqHeaders, true) {
 					lLog.Warn("access denied, invalid headers",
 						zap.String("headers", resource.GetHeaders()))
-
-					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+					accessForbidden(wrt, req)
 					return
 				}
 			}
@@ -848,16 +846,14 @@ func admissionMiddleware(
 			if !utils.HasAccess(resource.Groups, user.Groups, false) {
 				lLog.Warn("access denied, invalid groups",
 					zap.String("groups", strings.Join(resource.Groups, ",")))
-				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+				accessForbidden(wrt, req)
 				return
 			}
 
 			// step: if we have any claim matching, lets validate the tokens has the claims
 			for claimName, match := range claimMatches {
 				if !checkClaim(scope.Logger, user, claimName, match, resource.URL) {
-					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+					accessForbidden(wrt, req)
 					return
 				}
 			}
@@ -1000,8 +996,7 @@ func securityMiddleware(
 
 			if err := secure.Process(wrt, req); err != nil {
 				scope.Logger.Warn("failed security middleware", zap.Error(err))
-				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+				accessForbidden(wrt, req)
 				return
 			}
 

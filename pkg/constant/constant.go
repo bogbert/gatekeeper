@@ -43,6 +43,7 @@ const (
 	UnsecureScheme = "http"
 	SecureScheme   = "https"
 	AnyMethod      = "ANY"
+	UmaMethodScope = "method:"
 
 	_ contextKey = iota
 	ContextScopeName

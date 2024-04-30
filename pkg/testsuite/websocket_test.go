@@ -20,10 +20,14 @@ package testsuite
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
+	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/websocket"
@@ -40,18 +44,46 @@ func TestWebSocket(t *testing.T) {
 	upstreamURL := upstreamService.URL
 
 	// Setup the proxy.
-	c := newFakeKeycloakConfig()
-	c.Upstream = upstreamURL
+	cfg := newFakeKeycloakConfig()
+	cfg.Upstream = upstreamURL
+	res := &authorization.Resource{
+		URL:     "/ws",
+		Methods: utils.AllHTTPMethods,
+		Roles:   []string{"default"},
+	}
+	cfg.Resources = append(cfg.Resources, res)
 
-	_, proxyServer, proxyURL := newTestProxyService(c)
+	_, proxyServer, proxyURL := newTestProxyService(cfg)
 	defer proxyServer.Close()
+
+	resp, _, err := makeTestCodeFlowLogin(proxyURL+FakeAdminURL, false)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	err = resp.Body.Close()
+	require.NoError(t, err)
+
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == constant.AccessCookie {
+			cookie = c
+		}
+	}
 
 	proxyWsURL, err := url.Parse(proxyURL)
 	require.NoError(t, err)
 
 	proxyWsURL.Scheme = "ws"
 
-	wsock, err := websocket.Dial(proxyWsURL.String()+"/auth_all/white_listed/ws", "", "http://localhost/")
+	wsConfig, err := websocket.NewConfig(
+		proxyWsURL.String()+"/ws",
+		"http://localhost/",
+	)
+
+	require.NoError(t, err)
+	wsConfig.Header.Set("Cookie", cookie.String())
+
+	wsock, err := websocket.DialConfig(wsConfig)
 	require.NoError(t, err)
 
 	request := []byte("hello, world!")
@@ -66,5 +98,5 @@ func TestWebSocket(t *testing.T) {
 	err = json.Unmarshal(responseData, &responseJSON)
 	require.NoError(t, err)
 
-	assert.Equal(t, "/auth_all/white_listed/ws", responseJSON.URI)
+	assert.Equal(t, "/ws", responseJSON.URI)
 }

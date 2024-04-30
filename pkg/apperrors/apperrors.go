@@ -139,8 +139,9 @@ var (
 	ErrTooManyExtAuthzEnabled = errors.New(
 		"only one type of external authz can be enabled at once",
 	)
-	ErrMissingClientCredsWithUMA = errors.New("enable uma requires client credentials")
-	ErrTooManyDefaultDenyOpts    = errors.New(
+	ErrMissingClientCredsWithUMA        = errors.New("enable uma requires client credentials")
+	ErrEnableUmaIdpSessionCheckConflict = errors.New("you cannot have enable uma together with enable idp session check and noredirects")
+	ErrTooManyDefaultDenyOpts           = errors.New(
 		"only one of enable-default-deny/enable-default-deny-strict can be true",
 	)
 	ErrHmacRequiresEncKey                   = errors.New("enable-hmac requires encryption key")

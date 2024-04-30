@@ -24,12 +24,13 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCookieDomainHostHeader(t *testing.T) {
 	svc := newTestService()
-	resp, _, err := makeTestCodeFlowLogin(svc+"/admin", false)
-	assert.NoError(t, err)
+	resp, _, err := makeTestCodeFlowLogin(svc+FakeAdminURL, false)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 
 	var cookie *http.Cookie
@@ -41,7 +42,7 @@ func TestCookieDomainHostHeader(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.NotNil(t, cookie)
-	assert.Equal(t, cookie.Domain, "")
+	assert.Equal(t, "", cookie.Domain)
 }
 
 func TestCookieBasePath(t *testing.T) {
@@ -51,8 +52,8 @@ func TestCookieBasePath(t *testing.T) {
 
 	_, _, svc := newTestProxyService(cfg)
 
-	resp, _, err := makeTestCodeFlowLogin(svc+"/admin", false)
-	assert.NoError(t, err)
+	resp, _, err := makeTestCodeFlowLogin(svc+FakeAdminURL, false)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 
 	var cookie *http.Cookie
@@ -72,8 +73,8 @@ func TestCookieWithoutBasePath(t *testing.T) {
 
 	_, _, svc := newTestProxyService(cfg)
 
-	resp, _, err := makeTestCodeFlowLogin(svc+"/admin", false)
-	assert.NoError(t, err)
+	resp, _, err := makeTestCodeFlowLogin(svc+FakeAdminURL, false)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 
 	var cookie *http.Cookie
@@ -91,8 +92,8 @@ func TestCookieWithoutBasePath(t *testing.T) {
 func TestCookieDomain(t *testing.T) {
 	p, _, svc := newTestProxyService(nil)
 	p.Cm.CookieDomain = "domain.com"
-	resp, _, err := makeTestCodeFlowLogin(svc+"/admin", false)
-	assert.NoError(t, err)
+	resp, _, err := makeTestCodeFlowLogin(svc+FakeAdminURL, false)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 
 	var cookie *http.Cookie
@@ -104,7 +105,7 @@ func TestCookieDomain(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.NotNil(t, cookie)
-	assert.Equal(t, cookie.Domain, "domain.com")
+	assert.Equal(t, "domain.com", cookie.Domain)
 }
 
 func TestDropCookie(t *testing.T) {
@@ -113,42 +114,47 @@ func TestDropCookie(t *testing.T) {
 	resp := httptest.NewRecorder()
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	resp = httptest.NewRecorder()
 	proxy.Config.SecureCookie = false
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	resp = httptest.NewRecorder()
 	proxy.Config.SecureCookie = true
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
-	assert.NotEqual(t, resp.Header().Get("Set-Cookie"),
+	assert.NotEqual(t,
 		"test-cookie=test-value; Path=/; HttpOnly; Secure",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	proxy.Config.CookieDomain = "test.com"
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 	proxy.Config.SecureCookie = false
-	assert.NotEqual(t, resp.Header().Get("Set-Cookie"),
+	assert.NotEqual(t,
 		"test-cookie=test-value; Path=/; Domain=test.com;",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 }
 
 func TestDropRefreshCookie(t *testing.T) {
 	p, _, _ := newTestProxyService(nil)
 
-	req := newFakeHTTPRequest("GET", "/admin")
+	req := newFakeHTTPRequest("GET", FakeAdminURL)
 	resp := httptest.NewRecorder()
 	p.Cm.DropRefreshTokenCookie(req, resp, "test", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		constant.RefreshCookie+"=test; Path=/",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 }
 
@@ -159,8 +165,9 @@ func TestSessionOnlyCookie(t *testing.T) {
 	resp := httptest.NewRecorder()
 	p.Cm.DropCookie(resp, "test-cookie", "test-value", 1*time.Hour)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 }
 
@@ -170,32 +177,36 @@ func TestSameSiteCookie(t *testing.T) {
 	resp := httptest.NewRecorder()
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	resp = httptest.NewRecorder()
 	proxy.Cm.SameSiteCookie = constant.SameSiteStrict
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/; SameSite=Strict",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	resp = httptest.NewRecorder()
 	proxy.Cm.SameSiteCookie = constant.SameSiteLax
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/; SameSite=Lax",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	resp = httptest.NewRecorder()
 	proxy.Cm.SameSiteCookie = constant.SameSiteNone
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/; SameSite=None",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 }
 
@@ -205,53 +216,58 @@ func TestHTTPOnlyCookie(t *testing.T) {
 	resp := httptest.NewRecorder()
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	resp = httptest.NewRecorder()
 	proxy.Cm.HTTPOnlyCookie = true
 	proxy.Cm.DropCookie(resp, "test-cookie", "test-value", 0)
 
-	assert.Equal(t, resp.Header().Get("Set-Cookie"),
+	assert.Equal(t,
 		"test-cookie=test-value; Path=/; HttpOnly",
+		resp.Header().Get("Set-Cookie"),
 		"we have not set the cookie, headers: %v", resp.Header())
 }
 
 func TestClearAccessTokenCookie(t *testing.T) {
 	proxy, _, _ := newTestProxyService(nil)
 
-	req := newFakeHTTPRequest("GET", "/admin")
+	req := newFakeHTTPRequest("GET", FakeAdminURL)
 	resp := httptest.NewRecorder()
 	proxy.Cm.ClearAccessTokenCookie(req, resp)
-	assert.Contains(t, resp.Header().Get("Set-Cookie"),
+	assert.Contains(t,
+		resp.Header().Get("Set-Cookie"),
 		constant.AccessCookie+"=; Path=/; Expires=",
 		"we have not cleared the, headers: %v", resp.Header())
 }
 
 func TestClearRefreshAccessTokenCookie(t *testing.T) {
 	p, _, _ := newTestProxyService(nil)
-	req := newFakeHTTPRequest("GET", "/admin")
+	req := newFakeHTTPRequest("GET", FakeAdminURL)
 	resp := httptest.NewRecorder()
 	p.Cm.ClearRefreshTokenCookie(req, resp)
-	assert.Contains(t, resp.Header().Get("Set-Cookie"),
+	assert.Contains(t,
+		resp.Header().Get("Set-Cookie"),
 		constant.RefreshCookie+"=; Path=/; Expires=",
 		"we have not cleared the, headers: %v", resp.Header())
 }
 
 func TestClearAllCookies(t *testing.T) {
 	p, _, _ := newTestProxyService(nil)
-	req := newFakeHTTPRequest("GET", "/admin")
+	req := newFakeHTTPRequest("GET", FakeAdminURL)
 	resp := httptest.NewRecorder()
 	p.Cm.ClearAllCookies(req, resp)
-	assert.Contains(t, resp.Header().Get("Set-Cookie"),
+	assert.Contains(t,
+		resp.Header().Get("Set-Cookie"),
 		constant.AccessCookie+"=; Path=/; Expires=",
 		"we have not cleared the, headers: %v", resp.Header())
 }
 
 func TestGetMaxCookieChunkLength(t *testing.T) {
 	proxy, _, _ := newTestProxyService(nil)
-	req := newFakeHTTPRequest("GET", "/admin")
+	req := newFakeHTTPRequest("GET", FakeAdminURL)
 
 	proxy.Cm.HTTPOnlyCookie = true
 	proxy.Cm.EnableSessionCookies = true

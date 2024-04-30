@@ -24,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDecodeResourceBad(t *testing.T) {
@@ -161,10 +162,10 @@ func TestResourceParseOk(t *testing.T) {
 		r, err := NewResource().Parse(testCase.Option)
 
 		if testCase.Ok {
-			assert.NoError(t, err, "case %d should not have errored with: %s", i, err)
+			require.NoError(t, err, "case %d should not have errored with: %s", i, err)
 			assert.Equal(t, r, testCase.Resource, "case %d, expected: %#v, got: %#v", i, testCase.Resource, r)
 		} else {
-			assert.Error(t, err)
+			require.Error(t, err)
 		}
 	}
 }

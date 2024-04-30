@@ -197,6 +197,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
+			"--enable-idp-session-check=false",
 		}
 
 		fwdProxyArgs := []string{
@@ -277,6 +278,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
 			"--verbose=true",
+			"--enable-idp-session-check=false",
 		}
 
 		fwdProxyArgs := []string{

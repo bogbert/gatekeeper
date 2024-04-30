@@ -39,6 +39,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 // filterCookies is responsible for censoring any cookies we don't want sent
@@ -532,29 +533,36 @@ func getRPT(
 	return rpt, nil
 }
 
-func (r *OauthProxy) getCodeFlowTokens(
+func getCodeFlowTokens(
 	scope *RequestScope,
 	writer http.ResponseWriter,
 	req *http.Request,
+	enablePKCE bool,
+	cookiePKCEName string,
+	idpClient *gocloak.GoCloak,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
 ) (string, string, string, error) {
 	// step: ensure we have a authorization code
 	code := req.URL.Query().Get("code")
 
 	if code == "" {
-		r.accessError(writer, req)
+		accessError(writer, req)
 		return "", "", "", fmt.Errorf("missing auth code")
 	}
 
-	conf := r.newOAuth2Config(r.getRedirectionURL(writer, req))
+	conf := newOAuth2Config(getRedirectionURL(writer, req))
 
 	var codeVerifier *http.Cookie
 
-	if r.Config.EnablePKCE {
+	if enablePKCE {
 		var err error
-		codeVerifier, err = req.Cookie(r.Config.CookiePKCEName)
+		codeVerifier, err = req.Cookie(cookiePKCEName)
 		if err != nil {
 			scope.Logger.Error("problem getting pkce cookie", zap.Error(err))
-			r.accessForbidden(writer, req)
+			accessForbidden(writer, req)
 			return "", "", "", err
 		}
 	}
@@ -564,18 +572,18 @@ func (r *OauthProxy) getCodeFlowTokens(
 		conf,
 		code,
 		codeVerifier,
-		r.IdpClient.RestyClient().GetClient(),
+		idpClient.RestyClient().GetClient(),
 	)
 	if err != nil {
 		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
-		r.accessForbidden(writer, req)
+		accessForbidden(writer, req)
 		return "", "", "", err
 	}
 
 	idToken, assertOk := resp.Extra("id_token").(string)
 	if !assertOk {
 		scope.Logger.Error("unable to obtain id token", zap.Error(err))
-		r.accessForbidden(writer, req)
+		accessForbidden(writer, req)
 		return "", "", "", err
 	}
 
@@ -669,7 +677,7 @@ func verifyToken(
 	return oToken, nil
 }
 
-func (r *OauthProxy) encryptToken(
+func encryptToken(
 	scope *RequestScope,
 	rawToken string,
 	encKey string,
@@ -690,7 +698,7 @@ func (r *OauthProxy) encryptToken(
 	return encrypted, nil
 }
 
-func (r *OauthProxy) getRequestURIFromCookie(
+func getRequestURIFromCookie(
 	scope *RequestScope,
 	encodedRequestURI *http.Cookie,
 ) string {
