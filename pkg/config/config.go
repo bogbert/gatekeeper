@@ -19,9 +19,10 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	googleconfig "github.com/gogatekeeper/gatekeeper/pkg/google/config"
 	keycloakconfig "github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 )
 
-func ProduceConfig(provider string) core.Configs {
+func ProduceConfig[T proxycore.KeycloakProvider | proxycore.GoogleProvider](provider T) core.Configs {
 	switch provider {
 	case "keycloak":
 		return keycloakconfig.NewDefaultConfig()

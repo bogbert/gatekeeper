@@ -35,6 +35,8 @@ weight: 2
 |    --request-id-header value               | the http header name for request id | X-Request-ID | PROXY_REQUEST_ID_HEADER
 |    --response-headers value                | custom headers to added to the http response key=value | | PROXY_RESPONSE_HEADERS
 |    --custom-http-methods                   | list of additional non-standard http methods | |
+|    --allowed-query-params                  | allowed query params, sent to IDP key=optional value | |
+|    --default-allowed-query-params          | default allowed query params, sent to IDP key=required-value | |
 |    --enable-self-signed-tls                | create self signed certificates for the proxy | false | PROXY_ENABLE_SELF_SIGNED_TLS
 |    --self-signed-tls-hostnames value       | a list of hostnames to place on the self-signed certificate | |
 |    --self-signed-tls-expiration value      | the expiration of the certificate before rotation | 3h0m0s | PROXY_SELF_SIGNED_TLS_EXPIRATION

@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1441,7 +1442,7 @@ func TestNoProxy(t *testing.T) {
 func TestAuthorizationTemplate(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.SignInPage = "../../templates/sign_in.html.tmpl"
-	uri := proxy.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.AuthorizationURL)
+	uri := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.AuthorizationURL)
 	cfg.Resources = []*authorization.Resource{
 		{
 			URL:     "/*",
@@ -1825,9 +1826,9 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLS",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.NoRedirects = true
 			},
@@ -1844,9 +1845,9 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLSMatch",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.TLSMinVersion = "tlsv1.0"
 				conf.NoRedirects = true
@@ -1865,9 +1866,9 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLSDiffer",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.TLSMinVersion = "tlsv1.2"
 				conf.NoRedirects = true
@@ -1886,9 +1887,9 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLSMinNotFullfilled",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.TLSMinVersion = "tlsv1.3"
 			},

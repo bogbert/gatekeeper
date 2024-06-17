@@ -19,6 +19,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
+	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -79,4 +81,21 @@ func (r RedisStore) Close() error {
 	}
 
 	return nil
+}
+
+// Get retrieves a token from the store, the key we are using here is the access token
+func (r RedisStore) GetRefreshTokenFromStore(
+	ctx context.Context,
+	token string,
+) (string, error) {
+	// step: the key is the access token
+	val, err := r.Get(ctx, utils.GetHashKey(token))
+	if err != nil {
+		return val, err
+	}
+	if val == "" {
+		return val, apperrors.ErrNoSessionStateFound
+	}
+
+	return val, nil
 }

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	keycloakproxy "github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,7 +95,7 @@ func TestGetAccessCookieExpiration_NoExp(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
-	duration := keycloakproxy.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
+	duration := session.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
 	assertAlmostEquals(t, c.AccessTokenDuration, duration)
 }
 
@@ -107,7 +107,7 @@ func TestGetAccessCookieExpiration_ZeroExp(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
-	duration := keycloakproxy.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
+	duration := session.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
 	assert.Greater(t, duration, 0*time.Second, "duration should be positive")
 	assertAlmostEquals(t, c.AccessTokenDuration, duration)
 }
@@ -120,7 +120,7 @@ func TestGetAccessCookieExpiration_PastExp(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
-	duration := keycloakproxy.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
+	duration := session.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
 	assertAlmostEquals(t, c.AccessTokenDuration, duration)
 }
 
@@ -131,7 +131,7 @@ func TestGetAccessCookieExpiration_ValidExp(t *testing.T) {
 	c := newFakeKeycloakConfig()
 	c.AccessTokenDuration = time.Duration(1) * time.Hour
 	proxy := newFakeProxy(c, &fakeAuthConfig{}).proxy
-	duration := keycloakproxy.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
+	duration := session.GetAccessCookieExpiration(proxy.Log, c.AccessTokenDuration, token)
 	expectedDuration := time.Until(time.Unix(fToken.Claims.Exp, 0))
 	assertAlmostEquals(t, expectedDuration, duration)
 }

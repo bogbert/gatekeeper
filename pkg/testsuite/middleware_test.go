@@ -26,6 +26,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +43,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -56,7 +59,7 @@ func TestMetricsMiddleware(t *testing.T) {
 	cfg.EnableRefreshTokens = true
 	cfg.EnableEncryptedToken = true
 	cfg.EncryptionKey = testEncryptionKey
-	uri := proxy.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.MetricsURL)
+	uri := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.MetricsURL)
 	requests := []fakeRequest{
 		{
 			URI:       FakeAuthAllURL,
@@ -192,9 +195,9 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12301"
 				conf.ListenAdminScheme = constant.SecureScheme
-				conf.TLSAdminCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSAdminPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSAdminCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSAdminCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSAdminPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSAdminCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -218,9 +221,9 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12302"
 				conf.ListenAdminScheme = constant.SecureScheme
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1527,6 +1530,35 @@ func TestRefreshToken(t *testing.T) {
 			},
 		},
 		{
+			Name: "TestRefreshTokenWithIdpSessionCheck",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableIDPSessionCheck = true
+				conf.EnableRefreshTokens = true
+				conf.EnableEncryptedToken = true
+				conf.Verbose = true
+				conf.EnableLogging = true
+				conf.EncryptionKey = testEncryptionKey
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:                           FakeAuthAllURL,
+					HasLogin:                      true,
+					Redirects:                     true,
+					OnResponse:                    delay,
+					ExpectedProxy:                 true,
+					ExpectedCode:                  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieRefreshName: checkRefreshTokenEncryption},
+				},
+				{
+					URI:           FakeAuthAllURL,
+					Redirects:     false,
+					HasLogin:      false,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+				},
+			},
+		},
+		{
 			Name: "TestRefreshTokenEncryptionWithClientIDAndIssuerCheckOn",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableRefreshTokens = true
@@ -1623,7 +1655,7 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 		return false
 	}
 
-	user, err := proxy.ExtractIdentity(token)
+	user, err := session.ExtractIdentity(token)
 
 	if err != nil {
 		return false
@@ -2329,7 +2361,7 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy:      false,
 					HasToken:           true,
 					ExpectedCode:       http.StatusForbidden,
-					TokenAuthorization: &authorization.Permissions{},
+					TokenAuthorization: &models.Permissions{},
 					ExpectedContent: func(body string, testNum int) {
 						assert.Contains(t, body, "")
 					},
@@ -2355,8 +2387,8 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
-					TokenAuthorization: &authorization.Permissions{
-						Permissions: []authorization.Permission{
+					TokenAuthorization: &models.Permissions{
+						Permissions: []models.Permission{
 							{
 								Scopes:       []string{"test"},
 								ResourceID:   "",
@@ -2388,8 +2420,8 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
-					TokenAuthorization: &authorization.Permissions{
-						Permissions: []authorization.Permission{
+					TokenAuthorization: &models.Permissions{
+						Permissions: []models.Permission{
 							{
 								Scopes:       []string{},
 								ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
@@ -2421,8 +2453,8 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
-					TokenAuthorization: &authorization.Permissions{
-						Permissions: []authorization.Permission{
+					TokenAuthorization: &models.Permissions{
+						Permissions: []models.Permission{
 							{
 								Scopes:       []string{"test"},
 								ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
@@ -2885,7 +2917,7 @@ func TestAuthenticationMiddleware(t *testing.T) {
 					RawToken:          badlySignedToken,
 					HasCookieToken:    true,
 					ExpectedProxy:     false,
-					ExpectedCode:      http.StatusSeeOther,
+					ExpectedCode:      http.StatusForbidden,
 				},
 			},
 		},

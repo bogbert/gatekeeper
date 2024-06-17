@@ -49,7 +49,7 @@ func TestEncryptDataBlock(t *testing.T) {
 func TestEncodeText(t *testing.T) {
 	session, err := EncodeText("12245325632323263762", "1gjrlcjQ8RyKANngp9607txr5fF5fhf1")
 	assert.NotEmpty(t, session)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func BenchmarkEncryptDataBlock(b *testing.B) {

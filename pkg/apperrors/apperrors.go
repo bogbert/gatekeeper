@@ -34,6 +34,7 @@ var (
 	ErrPKCEWithCodeOnly                = errors.New("pkce can be enabled only with no-redirect=false")
 	ErrPKCECodeCreation                = errors.New("creation of code verifier failed")
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
+	ErrQueryParamValueMismatch         = errors.New("query param value is not allowed")
 
 	ErrSessionExpiredVerifyOff  = errors.New("the session has expired and verification switch off")
 	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")
@@ -146,4 +147,9 @@ var (
 	)
 	ErrHmacRequiresEncKey                   = errors.New("enable-hmac requires encryption key")
 	ErrPostLogoutRedirectURIRequiresIDToken = errors.New("post logout redirect uri requires id token, enable id token cookie")
+	ErrAllowedQueryParamsWithNoRedirects    = errors.New("allowed-query-params are not valid with noredirects=true")
+	ErrDefaultAllowedQueryParamEmpty        = errors.New("default-allowed-query-params value cannot be empty")
+	ErrTooManyDefaultAllowedQueryParams     = errors.New("you have more default query params than allowed query params")
+	ErrMissingDefaultQueryParamInAllowed    = errors.New("param is present in default query params but missing in allowed")
+	ErrDefaultQueryParamNotAllowed          = errors.New("default query param is not in allowed query params")
 )

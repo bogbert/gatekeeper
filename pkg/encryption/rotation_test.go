@@ -24,6 +24,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -43,9 +44,7 @@ func newTestCertificateRotator(t *testing.T) *CertificationRotation {
 	assert.NotNil(t, rotation)
 	assert.Equal(t, testCertificateFile, rotation.certificateFile)
 	assert.Equal(t, testPrivateKeyFile, rotation.privateKeyFile)
-	if !assert.NoError(t, err) {
-		t.Fatalf("unable to create the certificate rotator, error: %s", err)
-	}
+	require.NoError(t, err, "unable to create the certificate rotator")
 
 	return rotation
 }
@@ -59,7 +58,7 @@ func TestNewCeritifacteRotator(t *testing.T) {
 	)
 	c, err := NewCertificateRotator(testCertificateFile, testPrivateKeyFile, zap.NewNop(), &counter)
 	assert.NotNil(t, c)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestNewCeritifacteRotatorFailure(t *testing.T) {
@@ -71,14 +70,14 @@ func TestNewCeritifacteRotatorFailure(t *testing.T) {
 	)
 	c, err := NewCertificateRotator("./tests/does_not_exist", testPrivateKeyFile, zap.NewNop(), &counter)
 	assert.Nil(t, c)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestGetCertificate(t *testing.T) {
 	c := newTestCertificateRotator(t)
 	assert.NotEmpty(t, c.certificate)
 	crt, err := c.GetCertificate(nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, crt)
 }
 
@@ -87,12 +86,12 @@ func TestLoadCertificate(t *testing.T) {
 	assert.NotEmpty(t, c.certificate)
 	_ = c.storeCertificate(tls.Certificate{})
 	crt, err := c.GetCertificate(nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, &tls.Certificate{}, crt)
 }
 
 func TestWatchCertificate(t *testing.T) {
 	c := newTestCertificateRotator(t)
 	err := c.Watch()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

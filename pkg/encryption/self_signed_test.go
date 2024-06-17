@@ -31,20 +31,20 @@ import (
 
 func TestNewSelfSignedCertificate(t *testing.T) {
 	c, err := NewSelfSignedCertificate([]string{"localhost"}, 5*time.Minute, zap.NewNop())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, c)
 	c.close()
 }
 
 func TestSelfSignedNoHostnames(t *testing.T) {
 	c, err := NewSelfSignedCertificate([]string{}, 5*time.Minute, zap.NewNop())
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, c)
 }
 
 func TestSelfSignedExpirationBad(t *testing.T) {
 	c, err := NewSelfSignedCertificate([]string{"localhost"}, 1*time.Minute, zap.NewNop())
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, c)
 }
 
@@ -54,6 +54,6 @@ func TestSelfSignedGetCertificate(t *testing.T) {
 	require.NotNil(t, c)
 	defer c.close()
 	cert, err := c.GetCertificate(&tls.ClientHelloInfo{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, cert)
 }

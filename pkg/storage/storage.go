@@ -20,6 +20,7 @@ type Storage interface {
 	Delete(context.Context, string) error
 	// Close is used to close off any resources
 	Close() error
+	GetRefreshTokenFromStore(ctx context.Context, token string) (string, error)
 }
 
 // createStorage creates the store client for use

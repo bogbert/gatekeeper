@@ -2,16 +2,19 @@ package core
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 )
+
+type KeycloakProvider string
+type GoogleProvider string
 
 var (
 	release  = ""
 	gitsha   = "no gitsha provided"
 	compiled = "0"
 	Version  = ""
-	Provider = "keycloak"
 )
 
 // GetVersion returns the proxy version
@@ -30,4 +33,9 @@ func GetVersion() string {
 type OauthProxies interface {
 	CreateReverseProxy() error
 	Run() error
+}
+
+// ReverseProxy is a wrapper
+type ReverseProxy interface {
+	ServeHTTP(rw http.ResponseWriter, req *http.Request)
 }

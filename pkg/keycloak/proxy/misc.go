@@ -17,14 +17,9 @@ package proxy
 
 import (
 	"context"
-	"encoding/base64"
-	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -35,262 +30,40 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
-	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
-	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
-	"golang.org/x/oauth2"
 )
 
-// filterCookies is responsible for censoring any cookies we don't want sent
-func filterCookies(req *http.Request, filter []string) error {
-	// @NOTE: there doesn't appear to be a way of removing a cookie from the http.Request as
-	// AddCookie() just append
-	cookies := req.Cookies()
-	// @step: empty the current cookies
-	req.Header.Set("Cookie", "")
-	// @step: iterate the cookies and filter out anything we
-	for _, cookie := range cookies {
-		var found bool
-		// @step: does this cookie match our filter?
-		for _, n := range filter {
-			if strings.HasPrefix(cookie.Name, n) {
-				req.AddCookie(&http.Cookie{Name: cookie.Name, Value: "censored"})
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			req.AddCookie(cookie)
-		}
-	}
-
-	return nil
-}
-
-// revokeProxy is responsible for stopping middleware from proxying the request
-func revokeProxy(logger *zap.Logger, req *http.Request) context.Context {
-	var scope *RequestScope
-	ctxVal := req.Context().Value(constant.ContextScopeName)
-
-	switch ctxVal {
-	case nil:
-		scope = &RequestScope{AccessDenied: true}
-	default:
-		var assertOk bool
-		scope, assertOk = ctxVal.(*RequestScope)
-		if !assertOk {
-			logger.Error(apperrors.ErrAssertionFailed.Error())
-			scope = &RequestScope{AccessDenied: true}
-		}
-	}
-
-	scope.AccessDenied = true
-
-	return context.WithValue(req.Context(), constant.ContextScopeName, scope)
-}
-
-// accessForbidden redirects the user to the forbidden page
-func accessForbidden(
-	logger *zap.Logger,
-	httpStatus int,
-	page string,
-	tags map[string]string,
-	tmpl *template.Template,
-) func(wrt http.ResponseWriter, req *http.Request) context.Context {
-	return func(wrt http.ResponseWriter, req *http.Request) context.Context {
-		wrt.WriteHeader(httpStatus)
-		// are we using a custom http template for 403?
-		if page != "" {
-			name := path.Base(page)
-
-			if err := tmpl.ExecuteTemplate(wrt, name, tags); err != nil {
-				logger.Error(
-					"failed to render the template",
-					zap.Error(err),
-					zap.String("template", name),
-				)
-			}
-		}
-
-		return revokeProxy(logger, req)
-	}
-}
-
-// renders customSignInPage
-func customSignInPage(
-	logger *zap.Logger,
-	page string,
-	tags map[string]string,
-	tmpl *template.Template,
-) func(wrt http.ResponseWriter, authURL string) {
-	return func(wrt http.ResponseWriter, authURL string) {
-		wrt.WriteHeader(http.StatusOK)
-		name := path.Base(page)
-		model := make(map[string]string)
-		model["redirect"] = authURL
-		mTags := utils.MergeMaps(model, tags)
-
-		if err := tmpl.ExecuteTemplate(wrt, name, mTags); err != nil {
-			logger.Error(
-				"failed to render the template",
-				zap.Error(err),
-				zap.String("template", name),
-			)
-		}
-	}
-}
-
-// redirectToURL redirects the user and aborts the context
-func redirectToURL(
-	logger *zap.Logger,
-	url string,
-	wrt http.ResponseWriter,
-	req *http.Request,
-	statusCode int,
-) context.Context {
-	wrt.Header().Add(
-		"Cache-Control",
-		"no-cache, no-store, must-revalidate, max-age=0",
-	)
-
-	http.Redirect(wrt, req, url, statusCode)
-	return revokeProxy(logger, req)
-}
-
-// WithOAuthURI returns the oauth uri
-func WithOAuthURI(baseURI string, oauthURI string) func(uri string) string {
-	return func(uri string) string {
-		uri = strings.TrimPrefix(uri, "/")
-		if baseURI != "" {
-			return fmt.Sprintf("%s/%s/%s", baseURI, oauthURI, uri)
-		}
-		return fmt.Sprintf("%s/%s", oauthURI, uri)
-	}
-}
-
-// redirectToAuthorization redirects the user to authorization handler
-func redirectToAuthorization(
-	logger *zap.Logger,
-	noRedirects bool,
-	cookManager *cookie.Manager,
-	skipTokenVerification bool,
-	noProxy bool,
-	baseURI string,
-	oAuthURI string,
-) func(wrt http.ResponseWriter, req *http.Request) context.Context {
-	return func(wrt http.ResponseWriter, req *http.Request) context.Context {
-		if noRedirects {
-			wrt.WriteHeader(http.StatusUnauthorized)
-			return revokeProxy(logger, req)
-		}
-
-		// step: add a state referrer to the authorization page
-		uuid := cookManager.DropStateParameterCookie(req, wrt)
-		authQuery := fmt.Sprintf("?state=%s", uuid)
-
-		// step: if verification is switched off, we can't authorization
-		if skipTokenVerification {
-			logger.Error(
-				"refusing to redirection to authorization endpoint, " +
-					"skip token verification switched on",
-			)
-
-			wrt.WriteHeader(http.StatusForbidden)
-			return revokeProxy(logger, req)
-		}
-
-		url := WithOAuthURI(baseURI, oAuthURI)(constant.AuthorizationURL + authQuery)
-
-		if noProxy && !noRedirects {
-			xForwardedHost := req.Header.Get("X-Forwarded-Host")
-			xProto := req.Header.Get("X-Forwarded-Proto")
-
-			if xForwardedHost == "" || xProto == "" {
-				logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
-
-				wrt.WriteHeader(http.StatusForbidden)
-				return revokeProxy(logger, req)
-			}
-
-			url = fmt.Sprintf(
-				"%s://%s%s",
-				xProto,
-				xForwardedHost,
-				url,
-			)
-		}
-
-		logger.Debug("redirecting to url", zap.String("url", url))
-
-		redirectToURL(
-			logger,
-			url,
-			wrt,
-			req,
-			http.StatusSeeOther,
-		)
-
-		return revokeProxy(logger, req)
-	}
-}
-
-// GetAccessCookieExpiration calculates the expiration of the access token cookie
-func GetAccessCookieExpiration(
-	logger *zap.Logger,
-	accessTokenDuration time.Duration,
-	refresh string,
-) time.Duration {
-	// notes: by default the duration of the access token will be the configuration option, if
-	// however we can decode the refresh token, we will set the duration to the duration of the
-	// refresh token
-	duration := accessTokenDuration
-
-	webToken, err := jwt.ParseSigned(refresh)
-	if err != nil {
-		logger.Error("unable to parse token")
-	}
-
-	if ident, err := ExtractIdentity(webToken); err == nil {
-		delta := time.Until(ident.ExpiresAt)
-
-		if delta > 0 {
-			duration = delta
-		}
-
-		logger.Debug(
-			"parsed refresh token with new duration",
-			zap.Duration("new duration", delta),
-		)
-	} else {
-		logger.Debug("refresh token is opaque and cannot be used to extend calculated duration")
-	}
-
-	return duration
-}
-
 //nolint:cyclop
-func (r *OauthProxy) getPAT(done chan bool) {
+func getPAT(
+	logger *zap.Logger,
+	pat *PAT,
+	clientID string,
+	clientSecret string,
+	realm string,
+	openIDProviderTimeout time.Duration,
+	patRetryCount int,
+	patRetryInterval time.Duration,
+	enableForwarding bool,
+	forwardingGrantType string,
+	idpClient *gocloak.GoCloak,
+	forwardingUsername string,
+	forwardingPassword string,
+	done chan bool,
+) {
 	retry := 0
-	r.pat = &PAT{}
 	initialized := false
-	rConfig := *r.Config
-	clientID := rConfig.ClientID
-	clientSecret := rConfig.ClientSecret
-	realm := rConfig.Realm
-	timeout := rConfig.OpenIDProviderTimeout
-	patRetryCount := rConfig.PatRetryCount
-	patRetryInterval := rConfig.PatRetryInterval
 	grantType := configcore.GrantTypeClientCreds
 
-	if rConfig.EnableForwarding && rConfig.ForwardingGrantType == configcore.GrantTypeUserCreds {
+	if enableForwarding && forwardingGrantType == configcore.GrantTypeUserCreds {
 		grantType = configcore.GrantTypeUserCreds
 	}
 
 	for {
 		if retry > 0 {
-			r.Log.Info(
+			logger.Info(
 				"retrying fetching PAT token",
 				zap.Int("retry", retry),
 			)
@@ -298,7 +71,7 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		ctx, cancel := context.WithTimeout(
 			context.Background(),
-			timeout,
+			openIDProviderTimeout,
 		)
 
 		var token *gocloak.JWT
@@ -306,23 +79,23 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		switch grantType {
 		case configcore.GrantTypeClientCreds:
-			token, err = r.IdpClient.LoginClient(
+			token, err = idpClient.LoginClient(
 				ctx,
 				clientID,
 				clientSecret,
 				realm,
 			)
 		case configcore.GrantTypeUserCreds:
-			token, err = r.IdpClient.Login(
+			token, err = idpClient.Login(
 				ctx,
 				clientID,
 				clientSecret,
 				realm,
-				rConfig.ForwardingUsername,
-				rConfig.ForwardingPassword,
+				forwardingUsername,
+				forwardingPassword,
 			)
 		default:
-			r.Log.Error(
+			logger.Error(
 				"Chosen grant type is not supported",
 				zap.String("grant_type", grantType),
 			)
@@ -331,7 +104,7 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		if err != nil {
 			retry++
-			r.Log.Error("problem getting PAT token", zap.Error(err))
+			logger.Error("problem getting PAT token", zap.Error(err))
 
 			if retry >= patRetryCount {
 				cancel()
@@ -342,9 +115,9 @@ func (r *OauthProxy) getPAT(done chan bool) {
 			continue
 		}
 
-		r.pat.m.Lock()
-		r.pat.Token = token
-		r.pat.m.Unlock()
+		pat.m.Lock()
+		pat.Token = token
+		pat.m.Unlock()
 
 		if !initialized {
 			done <- true
@@ -353,31 +126,27 @@ func (r *OauthProxy) getPAT(done chan bool) {
 		initialized = true
 
 		parsedToken, err := jwt.ParseSigned(token.AccessToken)
-
 		if err != nil {
 			retry++
-			r.Log.Error("failed to parse the access token", zap.Error(err))
+			logger.Error("failed to parse the access token", zap.Error(err))
 			<-time.After(patRetryInterval)
 			continue
 		}
 
 		stdClaims := &jwt.Claims{}
-
 		err = parsedToken.UnsafeClaimsWithoutVerification(stdClaims)
-
 		if err != nil {
 			retry++
-			r.Log.Error("unable to parse access token for claims", zap.Error(err))
+			logger.Error("unable to parse access token for claims", zap.Error(err))
 			<-time.After(patRetryInterval)
 			continue
 		}
 
 		retry = 0
 		expiration := stdClaims.Expiry.Time()
-
 		refreshIn := utils.GetWithin(expiration, 0.85)
 
-		r.Log.Info(
+		logger.Info(
 			"waiting for expiration of access token",
 			zap.Float64("refresh_in", refreshIn.Seconds()),
 		)
@@ -389,14 +158,14 @@ func (r *OauthProxy) getPAT(done chan bool) {
 func WithUMAIdentity(
 	req *http.Request,
 	targetPath string,
-	user *UserContext,
+	user *models.UserContext,
 	cookieUMAName string,
 	provider *oidc3.Provider,
 	clientID string,
 	skipClientIDCheck bool,
 	skipIssuerCheck bool,
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
-	authzFunc func(targetPath string, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	authzFunc func(targetPath string, userPerms models.Permissions) (authorization.AuthzDecision, error),
 ) (authorization.AuthzDecision, error) {
 	umaUser, err := getIdentity(req, cookieUMAName, constant.UMAHeader)
 	if err != nil {
@@ -409,7 +178,7 @@ func WithUMAIdentity(
 		return authorization.DeniedAuthz, apperrors.ErrAccessMismatchUmaToken
 	}
 
-	_, err = verifyToken(
+	_, err = utils.VerifyToken(
 		req.Context(),
 		provider,
 		umaUser.RawToken,
@@ -533,207 +302,15 @@ func getRPT(
 	return rpt, nil
 }
 
-func getCodeFlowTokens(
-	scope *RequestScope,
-	writer http.ResponseWriter,
-	req *http.Request,
-	enablePKCE bool,
-	cookiePKCEName string,
-	idpClient *gocloak.GoCloak,
-	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	newOAuth2Config func(redirectionURL string) *oauth2.Config,
-	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
-) (string, string, string, error) {
-	// step: ensure we have a authorization code
-	code := req.URL.Query().Get("code")
-
-	if code == "" {
-		accessError(writer, req)
-		return "", "", "", fmt.Errorf("missing auth code")
-	}
-
-	conf := newOAuth2Config(getRedirectionURL(writer, req))
-
-	var codeVerifier *http.Cookie
-
-	if enablePKCE {
-		var err error
-		codeVerifier, err = req.Cookie(cookiePKCEName)
-		if err != nil {
-			scope.Logger.Error("problem getting pkce cookie", zap.Error(err))
-			accessForbidden(writer, req)
-			return "", "", "", err
-		}
-	}
-
-	resp, err := exchangeAuthenticationCode(
-		req.Context(),
-		conf,
-		code,
-		codeVerifier,
-		idpClient.RestyClient().GetClient(),
-	)
-	if err != nil {
-		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
-		accessForbidden(writer, req)
-		return "", "", "", err
-	}
-
-	idToken, assertOk := resp.Extra("id_token").(string)
-	if !assertOk {
-		scope.Logger.Error("unable to obtain id token", zap.Error(err))
-		accessForbidden(writer, req)
-		return "", "", "", err
-	}
-
-	return resp.AccessToken, idToken, resp.RefreshToken, nil
-}
-
-// verifyOIDCTokens
-func verifyOIDCTokens(
-	ctx context.Context,
-	provider *oidc3.Provider,
-	clientID string,
-	rawAccessToken string,
-	rawIDToken string,
-	skipClientIDCheck bool,
-	skipIssuerCheck bool,
-) (*oidc3.IDToken, *oidc3.IDToken, error) {
-	var oIDToken *oidc3.IDToken
-	var oAccToken *oidc3.IDToken
-	var err error
-
-	oIDToken, err = verifyToken(ctx, provider, rawIDToken, clientID, false, false)
-	if err != nil {
-		return nil, nil, errors.Join(apperrors.ErrVerifyIDToken, err)
-	}
-
-	// check https://openid.net/specs/openid-connect-core-1_0.html#ImplicitIDToken - at_hash
-	// keycloak seems doesnt support yet at_hash
-	// https://stackoverflow.com/questions/60818373/configure-keycloak-to-include-an-at-hash-claim-in-the-id-token
-	if oIDToken.AccessTokenHash != "" {
-		err = oIDToken.VerifyAccessToken(rawAccessToken)
-		if err != nil {
-			return nil, nil, errors.Join(apperrors.ErrAccTokenVerifyFailure, err)
-		}
-	}
-
-	oAccToken, err = verifyToken(
-		ctx,
-		provider,
-		rawAccessToken,
-		clientID,
-		skipClientIDCheck,
-		skipIssuerCheck,
-	)
-	if err != nil {
-		return nil, nil, errors.Join(apperrors.ErrAccTokenVerifyFailure, err)
-	}
-
-	return oAccToken, oIDToken, nil
-}
-
-func verifyToken(
-	ctx context.Context,
-	provider *oidc3.Provider,
-	rawToken string,
-	clientID string,
-	skipClientIDCheck bool,
-	skipIssuerCheck bool,
-) (*oidc3.IDToken, error) {
-	// This verifier with this configuration checks only signatures
-	// we want to know if we are using valid token
-	// bad is that Verify method doesn't check first signatures, so
-	// we have to do it like this
-	verifier := provider.Verifier(
-		&oidc3.Config{
-			ClientID:          clientID,
-			SkipClientIDCheck: true,
-			SkipIssuerCheck:   true,
-			SkipExpiryCheck:   true,
-		},
-	)
-	_, err := verifier.Verify(ctx, rawToken)
-	if err != nil {
-		return nil, errors.Join(apperrors.ErrTokenSignature, err)
-	}
-
-	// Now doing expiration check
-	verifier = provider.Verifier(
-		&oidc3.Config{
-			ClientID:          clientID,
-			SkipClientIDCheck: skipClientIDCheck,
-			SkipIssuerCheck:   skipIssuerCheck,
-			SkipExpiryCheck:   false,
-		},
-	)
-
-	oToken, err := verifier.Verify(ctx, rawToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return oToken, nil
-}
-
-func encryptToken(
-	scope *RequestScope,
-	rawToken string,
-	encKey string,
-	tokenType string,
-	writer http.ResponseWriter,
-) (string, error) {
-	var err error
-	var encrypted string
-	if encrypted, err = encryption.EncodeText(rawToken, encKey); err != nil {
-		scope.Logger.Error(
-			"failed to encrypt token",
-			zap.Error(err),
-			zap.String("type", tokenType),
-		)
-		writer.WriteHeader(http.StatusInternalServerError)
-		return "", err
-	}
-	return encrypted, nil
-}
-
-func getRequestURIFromCookie(
-	scope *RequestScope,
-	encodedRequestURI *http.Cookie,
-) string {
-	// some clients URL-escape padding characters
-	unescapedValue, err := url.PathUnescape(encodedRequestURI.Value)
-	if err != nil {
-		scope.Logger.Warn(
-			"app did send a corrupted redirectURI in cookie: invalid url escaping",
-			zap.Error(err),
-		)
-	}
-	// Since the value is passed with a cookie, we do not expect the client to use base64url (but the
-	// base64-encoded value may itself be url-encoded).
-	// This is safe for browsers using atob() but needs to be treated with care for nodeJS clients,
-	// which natively use base64url encoding, and url-escape padding '=' characters.
-	decoded, err := base64.StdEncoding.DecodeString(unescapedValue)
-	if err != nil {
-		scope.Logger.Warn(
-			"app did send a corrupted redirectURI in cookie: invalid base64url encoding",
-			zap.Error(err),
-			zap.String("encoded_value", unescapedValue))
-	}
-
-	return string(decoded)
-}
-
 func refreshUmaToken(
 	ctx context.Context,
 	pat *PAT,
 	idpClient *gocloak.GoCloak,
 	realm string,
 	targetPath string,
-	user *UserContext,
+	user *models.UserContext,
 	methodScope *string,
-) (*UserContext, error) {
+) (*models.UserContext, error) {
 	tok, err := getRPT(
 		ctx,
 		pat,
@@ -752,26 +329,11 @@ func refreshUmaToken(
 		return nil, err
 	}
 
-	umaUser, err := ExtractIdentity(token)
+	umaUser, err := session.ExtractIdentity(token)
 	if err != nil {
 		return nil, err
 	}
 
 	umaUser.RawToken = tok.AccessToken
 	return umaUser, nil
-}
-
-func parseRefreshToken(rawRefreshToken string) (*jwt.Claims, error) {
-	refreshToken, err := jwt.ParseSigned(rawRefreshToken)
-	if err != nil {
-		return nil, err
-	}
-
-	stdRefreshClaims := &jwt.Claims{}
-	err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
-	if err != nil {
-		return nil, err
-	}
-
-	return stdRefreshClaims, nil
 }

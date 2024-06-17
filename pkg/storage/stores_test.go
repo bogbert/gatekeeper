@@ -22,16 +22,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateStorageRedis(t *testing.T) {
 	store, err := CreateStorage("redis://127.0.0.1")
 	assert.NotNil(t, store)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestCreateStorageFail(t *testing.T) {
 	store, err := CreateStorage("not_there:///tmp/bolt")
 	assert.Nil(t, store)
-	assert.Error(t, err)
+	require.Error(t, err)
 }

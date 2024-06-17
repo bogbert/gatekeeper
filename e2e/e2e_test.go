@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 	resty "github.com/go-resty/resty/v2"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	keycloakcore "github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
 	"github.com/gogatekeeper/gatekeeper/pkg/testsuite"
 )
@@ -34,6 +36,10 @@ const (
 	umaTestClientSecret     = "A5vokiGdI3H2r4aXFrANbKvn4R7cbf6P"
 	timeout                 = time.Second * 300
 	idpURI                  = "http://localhost:8081"
+	localURI                = "http://localhost:"
+	logoutURI               = "/oauth/logout"
+	allInterfaces           = "0.0.0.0:"
+	anyURI                  = "/any"
 	testUser                = "myuser"
 	testPass                = "baba1234"
 	testPath                = "/test"
@@ -52,13 +58,14 @@ func generateRandomPort() string {
 	rg := rand.New(rand.NewSource(time.Now().UnixNano()))
 	min := 1024
 	max := 65000
-	return fmt.Sprintf("%d", rg.Intn(max-min+1)+min)
+	return strconv.Itoa(rg.Intn(max-min+1) + min)
 }
 
 func startAndWait(portNum string, osArgs []string) {
 	go func() {
 		defer GinkgoRecover()
-		app := proxy.NewOauthProxyApp()
+
+		app := proxy.NewOauthProxyApp(keycloakcore.Provider)
 		Expect(app.Run(osArgs)).To(Succeed())
 	}()
 
@@ -106,13 +113,13 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 	BeforeEach(func() {
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
+		proxyAddress = localURI + portNum
 
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
 			"--upstream-url=" + server.URL,
@@ -149,7 +156,7 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
 				request = resty.New().R().SetAuthToken(respToken.AccessToken)
-				resp, err = request.Get(proxyAddress + "/oauth/logout")
+				resp, err = request.Get(proxyAddress + logoutURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 			},
@@ -164,13 +171,13 @@ var _ = Describe("Code Flow login/logout", func() {
 	BeforeEach(func() {
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
+		proxyAddress = localURI + portNum
 
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
 			"--upstream-url=" + server.URL,
@@ -215,11 +222,11 @@ var _ = Describe("Code Flow login/logout", func() {
 
 				By("wait for access token expiration")
 				time.Sleep(32 * time.Second)
-				resp, err = rClient.R().Get(proxyAddress + "/any")
+				resp, err = rClient.R().Get(proxyAddress + anyURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body = resp.Body()
-				Expect(strings.Contains(string(body), "/any")).To(BeTrue())
+				Expect(strings.Contains(string(body), anyURI)).To(BeTrue())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 				Expect(err).NotTo(HaveOccurred())
 				cookiesAfterRefresh := rClient.GetClient().Jar.Cookies(jarURI)
@@ -235,15 +242,15 @@ var _ = Describe("Code Flow login/logout", func() {
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
 
 				By("make another request with new access token")
-				resp, err = rClient.R().Get(proxyAddress + "/any")
+				resp, err = rClient.R().Get(proxyAddress + anyURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body = resp.Body()
-				Expect(strings.Contains(string(body), "/any")).To(BeTrue())
+				Expect(strings.Contains(string(body), anyURI)).To(BeTrue())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
 				By("log out")
-				resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+				resp, err = rClient.R().Get(proxyAddress + logoutURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
@@ -285,13 +292,13 @@ var _ = Describe("Code Flow login/logout", func() {
 				rClient.GetClient().Jar.SetCookies(jarURI, cookiesLogin)
 
 				By("make another request with forged access token")
-				resp, err = rClient.R().Get(proxyAddress + "/any")
+				resp, err = rClient.R().Get(proxyAddress + anyURI)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(strings.Contains(string(body), "/any")).To(BeFalse())
+				Expect(strings.Contains(string(body), anyURI)).To(BeFalse())
 				Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 
 				By("log out")
-				resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+				resp, err = rClient.R().Get(proxyAddress + logoutURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 			},
@@ -306,12 +313,12 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 	BeforeEach(func() {
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
+		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + pkceTestClient,
 			"--client-secret=" + pkceTestClientSecret,
 			"--upstream-url=" + server.URL,
@@ -341,7 +348,7 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 				body := resp.Body()
 				Expect(strings.Contains(string(body), pkceCookieName)).To(BeTrue())
 
-				resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+				resp, err = rClient.R().Get(proxyAddress + logoutURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
@@ -367,7 +374,7 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
 			"--upstream-url=" + server.URL,
@@ -386,12 +393,12 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 		startAndWait(portNum, osArgs)
 
 		portNum = generateRandomPort()
-		proxyAddressSec = "http://localhost:" + portNum
+		proxyAddressSec = localURI + portNum
 		osArgs = []string{os.Args[0]}
 		proxyArgs = []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + pkceTestClient,
 			"--client-secret=" + pkceTestClientSecret,
 			"--upstream-url=" + server.URL,
@@ -433,7 +440,7 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 			Expect(strings.Contains(string(body), testPath)).To(BeTrue())
 
 			By("Logout user on first client")
-			resp, err = rClient.R().Get(proxyAddressFirst + "/oauth/logout")
+			resp, err = rClient.R().Get(proxyAddressFirst + logoutURI)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 

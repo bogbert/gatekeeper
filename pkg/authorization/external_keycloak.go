@@ -6,22 +6,13 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 )
-
-type Permission struct {
-	Scopes       []string `json:"scopes"`
-	ResourceID   string   `json:"rsid"`
-	ResourceName string   `json:"rsname"`
-}
-
-type Permissions struct {
-	Permissions []Permission `json:"permissions"`
-}
 
 var _ Provider = (*KeycloakAuthorizationProvider)(nil)
 
 type KeycloakAuthorizationProvider struct {
-	perms       Permissions
+	perms       models.Permissions
 	targetPath  string
 	idpClient   *gocloak.GoCloak
 	idpTimeout  time.Duration
@@ -31,7 +22,7 @@ type KeycloakAuthorizationProvider struct {
 }
 
 func NewKeycloakAuthorizationProvider(
-	perms Permissions,
+	perms models.Permissions,
 	targetPath string,
 	idpClient *gocloak.GoCloak,
 	idpTimeout time.Duration,

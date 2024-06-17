@@ -24,12 +24,12 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	BeforeEach(func() {
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
+		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + umaTestClient,
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + server.URL,
@@ -63,7 +63,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 			Expect(strings.Contains(string(body), umaCookieName)).To(BeFalse())
 
-			resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+			resp, err = rClient.R().Get(proxyAddress + logoutURI)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
@@ -117,12 +117,12 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 	BeforeEach(func() {
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
+		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + umaTestClient,
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + server.URL,
@@ -159,7 +159,7 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 			Expect(strings.Contains(string(body), umaCookieName)).To(BeFalse())
 
-			resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+			resp, err = rClient.R().Get(proxyAddress + logoutURI)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
@@ -180,14 +180,14 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
 		fwdPortNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
-		fwdProxyAddress = "http://localhost:" + fwdPortNum
+		proxyAddress = localURI + portNum
+		fwdProxyAddress = localURI + fwdPortNum
 		osArgs := []string{os.Args[0]}
 		fwdOsArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + umaTestClient,
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + server.URL,
@@ -203,7 +203,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 		fwdProxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + fwdPortNum,
+			"--listen=" + allInterfaces + fwdPortNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
 			"--enable-uma=true",
@@ -260,14 +260,14 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 		portNum = generateRandomPort()
 		fwdPortNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
-		fwdProxyAddress = "http://localhost:" + fwdPortNum
+		proxyAddress = localURI + portNum
+		fwdProxyAddress = localURI + fwdPortNum
 		osArgs := []string{os.Args[0]}
 		fwdOsArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + umaTestClient,
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + server.URL,
@@ -284,7 +284,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 		fwdProxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + fwdPortNum,
+			"--listen=" + allInterfaces + fwdPortNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
 			"--forwarding-username=" + testUser,
@@ -356,12 +356,12 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 
 	BeforeEach(func() {
 		portNum = generateRandomPort()
-		proxyAddress = "http://localhost:" + portNum
+		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
-			"--listen=" + "0.0.0.0:" + portNum,
+			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + umaTestClient,
 			"--client-secret=" + umaTestClientSecret,
 			"--no-redirects=false",
@@ -394,7 +394,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 			resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).ToNot(BeEmpty())
 
-			resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+			resp, err = rClient.R().Get(proxyAddress + logoutURI)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 

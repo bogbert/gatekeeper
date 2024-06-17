@@ -16,12 +16,23 @@ limitations under the License.
 package handlers
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
+	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"go.uber.org/zap"
 )
 
 // EmptyHandler is responsible for doing nothing
@@ -77,4 +88,197 @@ func DebugHandler(writer http.ResponseWriter, req *http.Request) {
 func MethodNotAllowHandlder(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
 	_, _ = w.Write(nil)
+}
+
+// ProxyMetricsHandler forwards the request into the prometheus handler
+func ProxyMetricsHandler(
+	localhostMetrics bool,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	metricsHandler http.Handler,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		if localhostMetrics {
+			if !net.ParseIP(utils.RealIP(req)).IsLoopback() {
+				accessForbidden(wrt, req)
+				return
+			}
+		}
+		metricsHandler.ServeHTTP(wrt, req)
+	}
+}
+
+// RetrieveIDToken retrieves the id token from cookie
+func RetrieveIDToken(
+	cookieIDTokenName string,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encryptionKey string,
+	req *http.Request,
+) (string, string, error) {
+	var token string
+	var err error
+	var encrypted string
+
+	token, err = session.GetTokenInCookie(req, cookieIDTokenName)
+
+	if err != nil {
+		return token, "", err
+	}
+
+	if enableEncryptedToken || forceEncryptedCookie {
+		encrypted = token
+		token, err = encryption.DecodeText(token, encryptionKey)
+	}
+
+	return token, encrypted, err
+}
+
+// discoveryHandler provides endpoint info
+func DiscoveryHandler(
+	logger *zap.Logger,
+	withOAuthURI func(string) string,
+) func(wrt http.ResponseWriter, _ *http.Request) {
+	return func(wrt http.ResponseWriter, _ *http.Request) {
+		resp := &models.DiscoveryResponse{
+			ExpiredURL: withOAuthURI(constant.ExpiredURL),
+			LogoutURL:  withOAuthURI(constant.LogoutURL),
+			TokenURL:   withOAuthURI(constant.TokenURL),
+			LoginURL:   withOAuthURI(constant.LoginURL),
+		}
+
+		respBody, err := json.Marshal(resp)
+
+		if err != nil {
+			logger.Error(
+				apperrors.ErrMarshallDiscoveryResp.Error(),
+				zap.String("error", err.Error()),
+			)
+
+			wrt.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		wrt.WriteHeader(http.StatusOK)
+		_, err = wrt.Write(respBody)
+
+		if err != nil {
+			logger.Error(
+				apperrors.ErrDiscoveryResponseWrite.Error(),
+				zap.String("error", err.Error()),
+			)
+		}
+	}
+}
+
+// getRedirectionURL returns the redirectionURL for the oauth flow
+func GetRedirectionURL(
+	logger *zap.Logger,
+	redirectionURL string,
+	noProxy bool,
+	noRedirects bool,
+	secureCookie bool,
+	cookieOAuthStateName string,
+	withOAuthURI func(string) string,
+) func(wrt http.ResponseWriter, req *http.Request) string {
+	return func(wrt http.ResponseWriter, req *http.Request) string {
+		var redirect string
+
+		switch redirectionURL {
+		case "":
+			var scheme string
+			var host string
+
+			if noProxy && !noRedirects {
+				scheme = req.Header.Get("X-Forwarded-Proto")
+				host = req.Header.Get("X-Forwarded-Host")
+			} else {
+				// need to determine the scheme, cx.Request.URL.Scheme doesn't have it, best way is to default
+				// and then check for TLS
+				scheme = constant.UnsecureScheme
+				host = req.Host
+				if req.TLS != nil {
+					scheme = constant.SecureScheme
+				}
+			}
+
+			if scheme == constant.UnsecureScheme && secureCookie {
+				hint := "you have secure cookie set to true but using http "
+				hint += "use https or secure cookie false"
+				logger.Warn(hint)
+			}
+
+			redirect = fmt.Sprintf("%s://%s", scheme, host)
+		default:
+			redirect = redirectionURL
+		}
+
+		state, _ := req.Cookie(cookieOAuthStateName)
+
+		if state != nil && req.URL.Query().Get("state") != state.Value {
+			logger.Error("state parameter mismatch")
+			wrt.WriteHeader(http.StatusForbidden)
+			return ""
+		}
+
+		return fmt.Sprintf("%s%s", redirect, withOAuthURI(constant.CallbackURL))
+	}
+}
+
+// ExpirationHandler checks if the token has expired
+func ExpirationHandler(
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	cookieAccessName string,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		user, err := getIdentity(req, cookieAccessName, "")
+		if err != nil {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if user.IsExpired() {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		wrt.WriteHeader(http.StatusOK)
+	}
+}
+
+// TokenHandler display access token to screen
+func TokenHandler(
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	cookieAccessName string,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		user, err := getIdentity(req, cookieAccessName, "")
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		token, err := jwt.ParseSigned(user.RawToken)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		jsonMap := make(map[string]interface{})
+		err = token.UnsafeClaimsWithoutVerification(&jsonMap)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		result, err := json.Marshal(jsonMap)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		_, _ = wrt.Write(result)
+	}
 }

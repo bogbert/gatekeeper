@@ -33,8 +33,8 @@ import (
 )
 
 // newOauthProxyApp creates a new cli application and runs it
-func NewOauthProxyApp() *cli.App {
-	cfg := config.ProduceConfig(proxycore.Provider)
+func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](provider T) *cli.App {
+	cfg := config.ProduceConfig(provider)
 	app := cli.NewApp()
 	// we had to set this after upgrade from urvafe v1 to v2
 	app.DisableSliceFlagSeparator = true
@@ -238,6 +238,22 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 			return err
 		}
 		utils.MergeMaps(config.GetHeaders(), headers)
+	}
+
+	if cliCtx.IsSet("allowed-query-params") {
+		headers, err := utils.DecodeKeyPairs(cliCtx.StringSlice("allowed-query-params"))
+		if err != nil {
+			return err
+		}
+		utils.MergeMaps(config.GetAllowedQueryParams(), headers)
+	}
+
+	if cliCtx.IsSet("default-allowed-query-params") {
+		headers, err := utils.DecodeKeyPairs(cliCtx.StringSlice("default-allowed-query-params"))
+		if err != nil {
+			return err
+		}
+		utils.MergeMaps(config.GetDefaultAllowedQueryParams(), headers)
 	}
 
 	if cliCtx.IsSet("resources") {

@@ -220,8 +220,7 @@ You can use gatekeeper to protect APIs, frontend server applications, frontend c
 Frontend server-side applications can be protected by Authorization Code Flow (also with PKCE), during which several redirection
 steps take place. For protecting APIs you can use Client Credentials Grant to avoid redirections steps
 involved in authorization code flow you have to use `--no-redirects=true`. For frontend applications
-you can use Authorization Code Flow (also with PKCE) with encrypted refresh token cookies enabled, in this case however you have to handle redirections
-at login/logout and you must make cookies available to js (less secure, altough at least they are encrypted).
+you can use Authorization Code Flow (also with PKCE) with encrypted refresh token cookies enabled, in this case however you have to handle redirections, e.g. at token expiration.
 
 ## Default Deny
 
@@ -291,6 +290,60 @@ There are two parameters which you can use to set up cookie names for access tok
 ```
 --cookie-access-name=myAccessTokenCookie
 --cookie-refresh-name=myRefreshTokenCookie
+```
+
+## Allowed Query Params for Authentication
+
+Sometimes you may want to pass some query params to IDP e.g. `kc_idp_hint` or `ui_locales` etc...Gatekeeper provides param `allowed-query-params`
+where you can specify which query params will be forwarded to IDP
+
+This example will allow passing `myparam` and `yourparam` with any value to IDP:
+
+```bash
+  --allowed-query-params="myparam" \
+  --allowed-query-params="yourparam"
+```
+
+yaml example:
+
+```yaml
+  allowed-query-params:
+    myparam: ""
+    yourparam: ""
+```
+
+This example will allow passing `myparam` and `yourparam` only with specified value:
+```bash
+  --allowed-query-params="myparam=myvalue" \
+  --allowed-query-params="yourparam=yourvalue"
+```
+
+yaml example:
+
+```yaml
+  allowed-query-params:
+    myparam: "myvalue"
+    yourparam: "yourvalue"
+```
+
+If you would like to have defaults for your parameters, there is `default-allowed-query-params` option available, these values
+will be used only when there are no params specified in url:
+
+**NOTE**: Params present in default query params must be allowed by allowed-query-params option
+
+cli example:
+
+```bash
+  --default-allowed-query-params="myparam=myvalue" \
+  --default-allowed-query-params="yourparam=yourvalue"
+```
+
+yaml example:
+
+```yaml
+  default-allowed-query-params:
+    myparam: "myvalue"
+    yourparam: "yourvalue"
 ```
 
 ## TCP proxy with HTTP CONNECT
@@ -417,7 +470,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.10.0
+  image: quay.io/gogatekeeper/gatekeeper:2.12.1
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -444,7 +497,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.10.0
+  image: quay.io/gogatekeeper/gatekeeper:2.12.1
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local

@@ -18,10 +18,11 @@ package main
 import (
 	"os"
 
+	keycloakcore "github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
 )
 
 func main() {
-	app := proxy.NewOauthProxyApp()
+	app := proxy.NewOauthProxyApp(keycloakcore.Provider)
 	_ = app.Run(os.Args)
 }

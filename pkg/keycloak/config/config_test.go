@@ -19,6 +19,7 @@ limitations under the License.
 package config
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -26,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -2468,6 +2470,103 @@ func TestIsPostLogoutRedirectURIValid(t *testing.T) {
 				err := testCase.Config.isPostLogoutRedirectURIValid()
 				if err != nil && testCase.Valid {
 					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestIsAllowedQueryParamsValid(t *testing.T) {
+	testCases := []struct {
+		Name           string
+		Config         *Config
+		Valid          bool
+		ExptectedError error
+	}{
+		{
+			Name: "AllowedQueryParamsValidValid",
+			Config: &Config{
+				AllowedQueryParams: map[string]string{"this": "that"},
+				NoRedirects:        false,
+			},
+			Valid: true,
+		},
+		{
+			Name: "AllowedQueryParamsValidWithNoRedirectsInvalid",
+			Config: &Config{
+				AllowedQueryParams: map[string]string{"this": "that"},
+				NoRedirects:        true,
+			},
+			Valid:          false,
+			ExptectedError: apperrors.ErrAllowedQueryParamsWithNoRedirects,
+		},
+		{
+			Name: "DefaultAllowedQueryParamsValidWithNoRedirectsInvalid",
+			Config: &Config{
+				DefaultAllowedQueryParams: map[string]string{"this": "that"},
+				NoRedirects:               true,
+			},
+			Valid:          false,
+			ExptectedError: apperrors.ErrAllowedQueryParamsWithNoRedirects,
+		},
+		{
+			Name: "DefaultAllowedQueryParamsWithEmptyValueInvalid",
+			Config: &Config{
+				AllowedQueryParams:        map[string]string{"this": "that"},
+				DefaultAllowedQueryParams: map[string]string{"this": ""},
+				NoRedirects:               false,
+			},
+			Valid:          false,
+			ExptectedError: apperrors.ErrDefaultAllowedQueryParamEmpty,
+		},
+		{
+			Name: "MoreDefaultParamsThanAllowedInvalid",
+			Config: &Config{
+				AllowedQueryParams:        map[string]string{"this": "that"},
+				DefaultAllowedQueryParams: map[string]string{"this": "that", "thiiiis": "thoose"},
+				NoRedirects:               false,
+			},
+			Valid:          false,
+			ExptectedError: apperrors.ErrTooManyDefaultAllowedQueryParams,
+		},
+		{
+			Name: "DefaultParamsDoesNotMatchAllowedInvalid",
+			Config: &Config{
+				AllowedQueryParams:        map[string]string{"this": "that"},
+				DefaultAllowedQueryParams: map[string]string{"this": "thatt"},
+				NoRedirects:               false,
+			},
+			Valid:          false,
+			ExptectedError: apperrors.ErrDefaultQueryParamNotAllowed,
+		},
+		{
+			Name: "DefaultParamsDoesNotMatchAllowedValid",
+			Config: &Config{
+				AllowedQueryParams:        map[string]string{"this": ""},
+				DefaultAllowedQueryParams: map[string]string{"this": "thatt"},
+				NoRedirects:               false,
+			},
+			Valid: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isAllowedQueryParamsValid()
+				if err != nil {
+					if testCase.Valid {
+						t.Fatalf("Expected test not to fail")
+					}
+					if !errors.Is(err, testCase.ExptectedError) {
+						t.Fatalf("Exptected %s, got %s", testCase.ExptectedError, err)
+					}
 				}
 
 				if err == nil && !testCase.Valid {

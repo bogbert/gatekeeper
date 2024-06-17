@@ -264,3 +264,41 @@ func (cm *Manager) ClearStateParameterCookie(req *http.Request, wrt http.Respons
 	cm.ClearCookie(req, wrt, cm.CookieRequestURIName)
 	cm.ClearCookie(req, wrt, cm.CookieOAuthStateName)
 }
+
+// findCookie looks for a cookie in a list of cookies
+func FindCookie(name string, cookies []*http.Cookie) *http.Cookie {
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+
+	return nil
+}
+
+// filterCookies is responsible for censoring any cookies we don't want sent
+func FilterCookies(req *http.Request, filter []string) error {
+	// @NOTE: there doesn't appear to be a way of removing a cookie from the http.Request as
+	// AddCookie() just append
+	cookies := req.Cookies()
+	// @step: empty the current cookies
+	req.Header.Set("Cookie", "")
+	// @step: iterate the cookies and filter out anything we
+	for _, cookie := range cookies {
+		var found bool
+		// @step: does this cookie match our filter?
+		for _, n := range filter {
+			if strings.HasPrefix(cookie.Name, n) {
+				req.AddCookie(&http.Cookie{Name: cookie.Name, Value: "censored"})
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			req.AddCookie(cookie)
+		}
+	}
+
+	return nil
+}

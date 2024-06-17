@@ -17,7 +17,7 @@ builds:
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
-    main: ./cmd/gatekeeper-keycloak.go
+    main: ./cmd/keycloak/gatekeeper-keycloak.go
     binary: gatekeeper
 
   - id: linux
@@ -35,7 +35,7 @@ builds:
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
-    main: ./cmd/gatekeeper-keycloak.go
+    main: ./cmd/keycloak/gatekeeper-keycloak.go
     binary: gatekeeper
 
   - id: windows
@@ -47,7 +47,7 @@ builds:
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
-    main: ./cmd/gatekeeper-keycloak.go
+    main: ./cmd/keycloak/gatekeeper-keycloak.go
     binary: gatekeeper
 
 signs:

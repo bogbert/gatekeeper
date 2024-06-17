@@ -19,10 +19,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	jose2 "github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
-	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
-	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/grokify/go-pkce"
 	"github.com/jochasinga/relay"
 )
@@ -32,32 +32,32 @@ type RoleClaim struct {
 }
 
 type DefaultTestTokenClaims struct {
-	Aud               string                    `json:"aud"`
-	Azp               string                    `json:"azp"`
-	ClientSession     string                    `json:"client_session"`
-	Email             string                    `json:"email"`
-	FamilyName        string                    `json:"family_name"`
-	GivenName         string                    `json:"given_name"`
-	Username          string                    `json:"username"`
-	Iat               int64                     `json:"iat"`
-	Iss               string                    `json:"iss"`
-	Jti               string                    `json:"jti"`
-	Name              string                    `json:"name"`
-	Nbf               int                       `json:"nbf"`
-	Exp               int64                     `json:"exp"`
-	PreferredUsername string                    `json:"preferred_username"`
-	SessionState      string                    `json:"session_state"`
-	Sub               string                    `json:"sub"`
-	Typ               string                    `json:"typ"`
-	Groups            []string                  `json:"groups"`
-	RealmAccess       RoleClaim                 `json:"realm_access"`
-	ResourceAccess    map[string]RoleClaim      `json:"resource_access"`
-	Item              string                    `json:"item"`
-	Found             string                    `json:"found"`
-	Item1             []string                  `json:"item1"`
-	Item2             []string                  `json:"item2"`
-	Item3             []string                  `json:"item3"`
-	Authorization     authorization.Permissions `json:"authorization"`
+	Aud               string               `json:"aud"`
+	Azp               string               `json:"azp"`
+	ClientSession     string               `json:"client_session"`
+	Email             string               `json:"email"`
+	FamilyName        string               `json:"family_name"`
+	GivenName         string               `json:"given_name"`
+	Username          string               `json:"username"`
+	Iat               int64                `json:"iat"`
+	Iss               string               `json:"iss"`
+	Jti               string               `json:"jti"`
+	Name              string               `json:"name"`
+	Nbf               int                  `json:"nbf"`
+	Exp               int64                `json:"exp"`
+	PreferredUsername string               `json:"preferred_username"`
+	SessionState      string               `json:"session_state"`
+	Sub               string               `json:"sub"`
+	Typ               string               `json:"typ"`
+	Groups            []string             `json:"groups"`
+	RealmAccess       RoleClaim            `json:"realm_access"`
+	ResourceAccess    map[string]RoleClaim `json:"resource_access"`
+	Item              string               `json:"item"`
+	Found             string               `json:"found"`
+	Item1             []string             `json:"item1"`
+	Item2             []string             `json:"item2"`
+	Item3             []string             `json:"item3"`
+	Authorization     models.Permissions   `json:"authorization"`
 }
 
 var defTestTokenClaims = DefaultTestTokenClaims{
@@ -491,7 +491,7 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	user, err := proxy.ExtractIdentity(token)
+	user, err := session.ExtractIdentity(token)
 
 	if err != nil {
 		wrt.WriteHeader(http.StatusUnauthorized)
@@ -526,8 +526,8 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 	codeVerifier := ""
 
 	if req.FormValue("grant_type") == configcore.GrantTypeUmaTicket {
-		token.Claims.Authorization = authorization.Permissions{
-			Permissions: []authorization.Permission{
+		token.Claims.Authorization = models.Permissions{
+			Permissions: []models.Permission{
 				{
 					Scopes:       []string{"test"},
 					ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
@@ -570,7 +570,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		}
 
 		if username == ValidUsername && password == ValidPassword {
-			renderJSON(http.StatusOK, writer, proxy.TokenResponse{
+			renderJSON(http.StatusOK, writer, models.TokenResponse{
 				TokenType:    "Bearer",
 				IDToken:      jwtAccess,
 				AccessToken:  jwtAccess,
@@ -600,7 +600,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		}
 
 		if clientID == ValidUsername && clientSecret == ValidPassword {
-			renderJSON(http.StatusOK, writer, proxy.TokenResponse{
+			renderJSON(http.StatusOK, writer, models.TokenResponse{
 				TokenType:    "Bearer",
 				IDToken:      jwtAccess,
 				AccessToken:  jwtAccess,
@@ -653,7 +653,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			return
 		}
 
-		renderJSON(http.StatusOK, writer, proxy.TokenResponse{
+		renderJSON(http.StatusOK, writer, models.TokenResponse{
 			TokenType:   "Bearer",
 			IDToken:     jwtAccess,
 			AccessToken: jwtAccess,
@@ -668,7 +668,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			}
 		}
 
-		renderJSON(http.StatusOK, writer, proxy.TokenResponse{
+		renderJSON(http.StatusOK, writer, models.TokenResponse{
 			TokenType:    "Bearer",
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,
@@ -676,7 +676,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			ExpiresIn:    float64(expires.Second()),
 		})
 	case configcore.GrantTypeUmaTicket:
-		renderJSON(http.StatusOK, writer, proxy.TokenResponse{
+		renderJSON(http.StatusOK, writer, models.TokenResponse{
 			TokenType:    "Bearer",
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,

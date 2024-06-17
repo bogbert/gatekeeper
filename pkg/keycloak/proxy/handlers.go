@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 
 	"net/http"
 	"net/url"
@@ -36,7 +35,11 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/grokify/go-pkce"
@@ -44,68 +47,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type DiscoveryResponse struct {
-	ExpiredURL string `json:"expired_endpoint"`
-	LogoutURL  string `json:"logout_endpoint"`
-	TokenURL   string `json:"token_endpoint"`
-	LoginURL   string `json:"login_endpoint"`
-}
-
-// getRedirectionURL returns the redirectionURL for the oauth flow
-func getRedirectionURL(
-	logger *zap.Logger,
-	redirectionURL string,
-	noProxy bool,
-	noRedirects bool,
-	secureCookie bool,
-	cookieOAuthStateName string,
-	withOAuthURI func(string) string,
-) func(wrt http.ResponseWriter, req *http.Request) string {
-	return func(wrt http.ResponseWriter, req *http.Request) string {
-		var redirect string
-
-		switch redirectionURL {
-		case "":
-			var scheme string
-			var host string
-
-			if noProxy && !noRedirects {
-				scheme = req.Header.Get("X-Forwarded-Proto")
-				host = req.Header.Get("X-Forwarded-Host")
-			} else {
-				// need to determine the scheme, cx.Request.URL.Scheme doesn't have it, best way is to default
-				// and then check for TLS
-				scheme = constant.UnsecureScheme
-				host = req.Host
-				if req.TLS != nil {
-					scheme = constant.SecureScheme
-				}
-			}
-
-			if scheme == constant.UnsecureScheme && secureCookie {
-				hint := "you have secure cookie set to true but using http "
-				hint += "use https or secure cookie false"
-				logger.Warn(hint)
-			}
-
-			redirect = fmt.Sprintf("%s://%s", scheme, host)
-		default:
-			redirect = redirectionURL
-		}
-
-		state, _ := req.Cookie(cookieOAuthStateName)
-
-		if state != nil && req.URL.Query().Get("state") != state.Value {
-			logger.Error("state parameter mismatch")
-			wrt.WriteHeader(http.StatusForbidden)
-			return ""
-		}
-
-		return fmt.Sprintf("%s%s", redirect, withOAuthURI(constant.CallbackURL))
-	}
-}
-
 // oauthAuthorizationHandler is responsible for performing the redirection to oauth provider
+//
+//nolint:cyclop
 func oauthAuthorizationHandler(
 	logger *zap.Logger,
 	skipTokenVerification bool,
@@ -116,6 +60,8 @@ func oauthAuthorizationHandler(
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
 	customSignInPage func(wrt http.ResponseWriter, authURL string),
+	allowedQueryParams map[string]string,
+	defaultAllowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
 		if skipTokenVerification {
@@ -123,7 +69,7 @@ func oauthAuthorizationHandler(
 			return
 		}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return
@@ -161,6 +107,33 @@ func oauthAuthorizationHandler(
 			cookManager.DropPKCECookie(wrt, codeVerifier)
 		}
 
+		if len(allowedQueryParams) > 0 {
+			for key, val := range allowedQueryParams {
+				if param := req.URL.Query().Get(key); param != "" {
+					if val != "" {
+						if val != param {
+							logger.Error(
+								apperrors.ErrQueryParamValueMismatch.Error(),
+								zap.String("param", key),
+							)
+							return
+						}
+					}
+					authCodeOptions = append(
+						authCodeOptions,
+						oauth2.SetAuthURLParam(key, param),
+					)
+				} else {
+					if val, ok := defaultAllowedQueryParams[key]; ok {
+						authCodeOptions = append(
+							authCodeOptions,
+							oauth2.SetAuthURLParam(key, val),
+						)
+					}
+				}
+			}
+		}
+
 		authURL := conf.AuthCodeURL(
 			req.URL.Query().Get("state"),
 			authCodeOptions...,
@@ -182,7 +155,7 @@ func oauthAuthorizationHandler(
 		}
 
 		scope.Logger.Debug("redirecting to auth_url", zap.String("auth_url", authURL))
-		redirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
+		core.RedirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
 	}
 }
 
@@ -224,20 +197,20 @@ func oauthCallbackHandler(
 			return
 		}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return
 		}
 
 		scope.Logger.Debug("callback handler")
-		accessToken, identityToken, refreshToken, err := getCodeFlowTokens(
+		accessToken, identityToken, refreshToken, err := session.GetCodeFlowTokens(
 			scope,
 			writer,
 			req,
 			enablePKCE,
 			cookiePKCEName,
-			idpClient,
+			idpClient.RestyClient().GetClient(),
 			accessForbidden,
 			accessError,
 			newOAuth2Config,
@@ -248,7 +221,7 @@ func oauthCallbackHandler(
 		}
 
 		rawAccessToken := accessToken
-		oAccToken, _, err := verifyOIDCTokens(
+		oAccToken, _, err := utils.VerifyOIDCTokens(
 			req.Context(),
 			provider,
 			clientID,
@@ -286,7 +259,7 @@ func oauthCallbackHandler(
 		if enableRefreshTokens && refreshToken != "" {
 			var encrypted string
 			var stdRefreshClaims *jwt.Claims
-			stdRefreshClaims, err = parseRefreshToken(refreshToken)
+			stdRefreshClaims, err = utils.ParseRefreshToken(refreshToken)
 			if err != nil {
 				scope.Logger.Error(apperrors.ErrParseRefreshToken.Error(), zap.Error(err))
 				accessForbidden(writer, req)
@@ -300,7 +273,7 @@ func oauthCallbackHandler(
 			}
 
 			oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
-			encrypted, err = encryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
+			encrypted, err = core.EncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
 			if err != nil {
 				return
 			}
@@ -325,7 +298,7 @@ func oauthCallbackHandler(
 		redirectURI := "/"
 		if req.URL.Query().Get("state") != "" {
 			if encodedRequestURI, _ := req.Cookie(cookieRequestURIName); encodedRequestURI != nil {
-				redirectURI = getRequestURIFromCookie(scope, encodedRequestURI)
+				redirectURI = session.GetRequestURIFromCookie(scope, encodedRequestURI)
 			}
 		}
 
@@ -366,18 +339,18 @@ func oauthCallbackHandler(
 
 		// step: are we encrypting the access token?
 		if enableEncryptedToken || forceEncryptedCookie {
-			accessToken, err = encryptToken(scope, accessToken, encryptionKey, "access", writer)
+			accessToken, err = core.EncryptToken(scope, accessToken, encryptionKey, "access", writer)
 			if err != nil {
 				return
 			}
 
-			identityToken, err = encryptToken(scope, identityToken, encryptionKey, "id", writer)
+			identityToken, err = core.EncryptToken(scope, identityToken, encryptionKey, "id", writer)
 			if err != nil {
 				return
 			}
 
 			if enableUma && umaError == nil {
-				umaToken, err = encryptToken(scope, umaToken, encryptionKey, "uma", writer)
+				umaToken, err = core.EncryptToken(scope, umaToken, encryptionKey, "uma", writer)
 				if err != nil {
 					return
 				}
@@ -401,7 +374,7 @@ func oauthCallbackHandler(
 		}
 
 		scope.Logger.Debug("redirecting to", zap.String("location", redirectURI))
-		redirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
+		core.RedirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
 	}
 }
 
@@ -412,7 +385,7 @@ func oauthCallbackHandler(
 func loginHandler(
 	logger *zap.Logger,
 	openIDProviderTimeout time.Duration,
-	idpClient *gocloak.GoCloak,
+	httpClient *http.Client,
 	enableLoginHandler bool,
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
@@ -426,7 +399,7 @@ func loginHandler(
 	store storage.Storage,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
@@ -444,7 +417,7 @@ func loginHandler(
 			ctx = context.WithValue(
 				ctx,
 				oauth2.HTTPClient,
-				idpClient.RestyClient().GetClient(),
+				httpClient,
 			)
 
 			if !enableLoginHandler {
@@ -485,7 +458,7 @@ func loginHandler(
 					errors.Join(apperrors.ErrParseAccessToken, err)
 			}
 
-			identity, err := ExtractIdentity(accessTokenObj)
+			identity, err := session.ExtractIdentity(accessTokenObj)
 			if err != nil {
 				return http.StatusNotImplemented,
 					errors.Join(apperrors.ErrExtractIdentityFromAccessToken, err)
@@ -535,7 +508,7 @@ func loginHandler(
 					req,
 					writer,
 					accessToken,
-					GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken),
+					session.GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken),
 				)
 
 				if enableIDTokenCookie {
@@ -543,7 +516,7 @@ func loginHandler(
 						req,
 						writer,
 						idToken,
-						GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken),
+						session.GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken),
 					)
 				}
 
@@ -606,10 +579,10 @@ func loginHandler(
 				}
 			}
 
-			var resp TokenResponse
+			var resp models.TokenResponse
 
 			if enableEncryptedToken {
-				resp = TokenResponse{
+				resp = models.TokenResponse{
 					IDToken:      idToken,
 					AccessToken:  accessToken,
 					RefreshToken: refreshToken,
@@ -618,7 +591,7 @@ func loginHandler(
 					TokenType:    token.TokenType,
 				}
 			} else {
-				resp = TokenResponse{
+				resp = models.TokenResponse{
 					IDToken:      plainIDToken,
 					AccessToken:  token.AccessToken,
 					RefreshToken: refreshToken,
@@ -671,9 +644,9 @@ func logoutHandler(
 	enableLogoutRedirect bool,
 	store storage.Storage,
 	cookManager *cookie.Manager,
-	idpClient *gocloak.GoCloak,
+	httpClient *http.Client,
 	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	GetIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	GetIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		// @check if the redirection is there
@@ -697,7 +670,7 @@ func logoutHandler(
 			}
 		}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -715,7 +688,7 @@ func logoutHandler(
 		identityToken := user.RawToken
 
 		//nolint:vetshadow
-		if refresh, _, err := retrieveRefreshToken(
+		if refresh, _, err := session.RetrieveRefreshToken(
 			store,
 			cookieRefreshName,
 			encryptionKey,
@@ -725,7 +698,7 @@ func logoutHandler(
 			identityToken = refresh
 		}
 
-		idToken, _, err := retrieveIDToken(
+		idToken, _, err := handlers.RetrieveIDToken(
 			cookieIDTokenName,
 			enableEncryptedToken,
 			forceEncryptedCookie,
@@ -775,7 +748,7 @@ func logoutHandler(
 				postLogoutParams,
 			)
 
-			redirectToURL(
+			core.RedirectToURL(
 				scope.Logger,
 				sendTo,
 				writer,
@@ -799,7 +772,6 @@ func logoutHandler(
 
 		// step: do we have a revocation endpoint?
 		if revocationURL != "" {
-			client := idpClient.RestyClient().GetClient()
 			// step: add the authentication headers
 			encodedID := url.QueryEscape(clientID)
 			encodedSecret := url.QueryEscape(clientSecret)
@@ -823,7 +795,7 @@ func logoutHandler(
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 			start := time.Now()
-			response, err := client.Do(request)
+			response, err := httpClient.Do(request)
 			if err != nil {
 				scope.Logger.Error(apperrors.ErrRevocationReqFailure.Error(), zap.Error(err))
 				writer.WriteHeader(http.StatusInternalServerError)
@@ -858,173 +830,7 @@ func logoutHandler(
 
 		// step: should we redirect the user
 		if redirectURL != "" {
-			redirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
-		}
-	}
-}
-
-// expirationHandler checks if the token has expired
-func expirationHandler(
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
-	cookieAccessName string,
-) func(wrt http.ResponseWriter, req *http.Request) {
-	return func(wrt http.ResponseWriter, req *http.Request) {
-		user, err := getIdentity(req, cookieAccessName, "")
-		if err != nil {
-			wrt.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		if user.IsExpired() {
-			wrt.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		wrt.WriteHeader(http.StatusOK)
-	}
-}
-
-// tokenHandler display access token to screen
-func tokenHandler(
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
-	cookieAccessName string,
-	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
-) func(wrt http.ResponseWriter, req *http.Request) {
-	return func(wrt http.ResponseWriter, req *http.Request) {
-		user, err := getIdentity(req, cookieAccessName, "")
-		if err != nil {
-			accessError(wrt, req)
-			return
-		}
-
-		token, err := jwt.ParseSigned(user.RawToken)
-		if err != nil {
-			accessError(wrt, req)
-			return
-		}
-
-		jsonMap := make(map[string]interface{})
-		err = token.UnsafeClaimsWithoutVerification(&jsonMap)
-		if err != nil {
-			accessError(wrt, req)
-			return
-		}
-
-		result, err := json.Marshal(jsonMap)
-		if err != nil {
-			accessError(wrt, req)
-			return
-		}
-
-		wrt.Header().Set("Content-Type", "application/json")
-		_, _ = wrt.Write(result)
-	}
-}
-
-// proxyMetricsHandler forwards the request into the prometheus handler
-func proxyMetricsHandler(
-	localhostMetrics bool,
-	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	metricsHandler http.Handler,
-) func(wrt http.ResponseWriter, req *http.Request) {
-	return func(wrt http.ResponseWriter, req *http.Request) {
-		if localhostMetrics {
-			if !net.ParseIP(utils.RealIP(req)).IsLoopback() {
-				accessForbidden(wrt, req)
-				return
-			}
-		}
-		metricsHandler.ServeHTTP(wrt, req)
-	}
-}
-
-// retrieveRefreshToken retrieves the refresh token from store or cookie
-func retrieveRefreshToken(
-	store storage.Storage,
-	cookieRefreshName string,
-	encryptionKey string,
-	req *http.Request,
-	user *UserContext,
-) (string, string, error) {
-	var token string
-	var err error
-
-	switch store != nil {
-	case true:
-		token, err = GetRefreshTokenFromStore(req.Context(), store, user.RawToken)
-	default:
-		token, err = utils.GetRefreshTokenFromCookie(req, cookieRefreshName)
-	}
-
-	if err != nil {
-		return token, "", err
-	}
-
-	encrypted := token // returns encrypted, avoids encoding twice
-	token, err = encryption.DecodeText(token, encryptionKey)
-	return token, encrypted, err
-}
-
-// retrieveIDToken retrieves the id token from cookie
-func retrieveIDToken(
-	cookieIDTokenName string,
-	enableEncryptedToken bool,
-	forceEncryptedCookie bool,
-	encryptionKey string,
-	req *http.Request,
-) (string, string, error) {
-	var token string
-	var err error
-	var encrypted string
-
-	token, err = utils.GetTokenInCookie(req, cookieIDTokenName)
-
-	if err != nil {
-		return token, "", err
-	}
-
-	if enableEncryptedToken || forceEncryptedCookie {
-		encrypted = token
-		token, err = encryption.DecodeText(token, encryptionKey)
-	}
-
-	return token, encrypted, err
-}
-
-// discoveryHandler provides endpoint info
-func discoveryHandler(
-	logger *zap.Logger,
-	withOAuthURI func(string) string,
-) func(wrt http.ResponseWriter, _ *http.Request) {
-	return func(wrt http.ResponseWriter, _ *http.Request) {
-		resp := &DiscoveryResponse{
-			ExpiredURL: withOAuthURI(constant.ExpiredURL),
-			LogoutURL:  withOAuthURI(constant.LogoutURL),
-			TokenURL:   withOAuthURI(constant.TokenURL),
-			LoginURL:   withOAuthURI(constant.LoginURL),
-		}
-
-		respBody, err := json.Marshal(resp)
-
-		if err != nil {
-			logger.Error(
-				apperrors.ErrMarshallDiscoveryResp.Error(),
-				zap.String("error", err.Error()),
-			)
-
-			wrt.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		wrt.Header().Set("Content-Type", "application/json")
-		wrt.WriteHeader(http.StatusOK)
-		_, err = wrt.Write(respBody)
-
-		if err != nil {
-			logger.Error(
-				apperrors.ErrDiscoveryResponseWrite.Error(),
-				zap.String("error", err.Error()),
-			)
+			core.RedirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
 		}
 	}
 }

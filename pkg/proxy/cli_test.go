@@ -22,18 +22,19 @@ import (
 	"testing"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/config"
-	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
+	keycloakcore "github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy/core"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 )
 
 func TestNewOauthProxyApp(t *testing.T) {
-	a := NewOauthProxyApp()
+	a := NewOauthProxyApp(keycloakcore.Provider)
 	assert.NotNil(t, a)
 }
 
 func TestGetCLIOptions(t *testing.T) {
-	cfg := config.ProduceConfig(proxycore.Provider)
+	cfg := config.ProduceConfig(keycloakcore.Provider)
 	if flags := getCommandLineOptions(cfg); flags == nil {
 		t.Error("we should have received some flags options")
 	}
@@ -41,13 +42,13 @@ func TestGetCLIOptions(t *testing.T) {
 
 func TestReadOptions(t *testing.T) {
 	capp := cli.NewApp()
-	cfg := config.ProduceConfig(proxycore.Provider)
+	cfg := config.ProduceConfig(keycloakcore.Provider)
 	capp.Flags = getCommandLineOptions(cfg)
 	capp.Action = func(cx *cli.Context) error {
 		ero := parseCLIOptions(cx, cfg)
-		assert.NoError(t, ero)
+		require.NoError(t, ero)
 		return nil
 	}
 	err := capp.Run([]string{""})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

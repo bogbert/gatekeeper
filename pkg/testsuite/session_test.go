@@ -25,8 +25,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
-	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
-	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -230,7 +230,7 @@ func TestGetTokenInRequest(t *testing.T) {
 				})
 			}
 		}
-		access, bearer, err := utils.GetTokenInRequest(req, defaultName, testCase.SkipAuthorizationHeaderIdentity, "")
+		access, bearer, err := session.GetTokenInRequest(req, defaultName, testCase.SkipAuthorizationHeaderIdentity, "")
 		switch testCase.Error {
 		case nil:
 			require.NoError(t, err, "case %d should not have thrown an error", idx)
@@ -243,7 +243,7 @@ func TestGetTokenInRequest(t *testing.T) {
 }
 
 func TestIsExpired(t *testing.T) {
-	user := &proxy.UserContext{
+	user := &models.UserContext{
 		ExpiresAt: time.Now(),
 	}
 	time.Sleep(1 * time.Millisecond)
@@ -262,7 +262,7 @@ func TestGetUserContext(t *testing.T) {
 	require.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
 	require.NoError(t, err)
-	context, err := proxy.ExtractIdentity(webToken)
+	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
 	assert.NotNil(t, context)
 	assert.Equal(t, "1e11e539-8256-4b3b-bda8-cc0d56cddb48", context.ID)
@@ -279,7 +279,7 @@ func TestGetUserRealmRoleContext(t *testing.T) {
 	require.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
 	require.NoError(t, err)
-	context, err := proxy.ExtractIdentity(webToken)
+	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
 	assert.NotNil(t, context)
 	assert.Equal(t, "1e11e539-8256-4b3b-bda8-cc0d56cddb48", context.ID)
@@ -296,7 +296,7 @@ func TestUserContextString(t *testing.T) {
 	require.NoError(t, err)
 	webToken, err := jwt.ParseSigned(jwtToken)
 	require.NoError(t, err)
-	context, err := proxy.ExtractIdentity(webToken)
+	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
 	assert.NotNil(t, context)
 	assert.NotEmpty(t, context.String())
