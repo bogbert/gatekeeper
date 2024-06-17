@@ -280,6 +280,8 @@ func IdentityHeadersMiddleware(
 				for claim, header := range customClaims {
 					if claim, found := user.Claims[claim]; found {
 						headers.Set(header, fmt.Sprintf("%v", claim))
+					} else {
+						headers.Set(header, "")
 					}
 				}
 			}
