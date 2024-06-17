@@ -27,6 +27,7 @@ type CustClaims struct {
 	RealmAccess    RealmRoles             `json:"realm_access"`
 	Groups         []string               `json:"groups"`
 	ResourceAccess map[string]interface{} `json:"resource_access"`
+	CognitoRoles   string                 `json:"role"`
 	FamilyName     string                 `json:"family_name"`
 	GivenName      string                 `json:"given_name"`
 	Username       string                 `json:"username"`

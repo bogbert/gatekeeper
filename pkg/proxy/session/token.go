@@ -226,6 +226,16 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 		}
 	}
 
+	// @step: extract the client roles from a string containing comma separated values between square brackets (fallback solution added for Cognito)
+	if len(roleList) == 0 {
+		strRoles := customClaims.CognitoRoles
+		if strRoles != "" && strRoles[0] == '[' && strRoles[len(strRoles) - 1] == ']' {
+			for _, role := range strings.Split(strRoles[1:len(strRoles) - 1], ",") {
+				roleList = append(roleList, strings.TrimSpace(role))
+			}
+		}
+	}
+
 	return &models.UserContext{
 		Audiences:     audiences,
 		Email:         customClaims.Email,
