@@ -659,7 +659,8 @@ func logoutHandler(
 				if k == "redirect" {
 					redirectURL = req.URL.Query().Get("redirect")
 
-					if redirectURL == "" {
+					// Only accept redirections starting with "/" to prevent open redirect attacks
+					if !strings.HasPrefix(redirectURL, "/") {
 						// then we can default to redirection url
 						redirectURL = strings.TrimSuffix(
 							redirectionURL,
