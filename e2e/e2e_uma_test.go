@@ -10,8 +10,8 @@ import (
 
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/testsuite"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive //we want to use it for ginkgo
+	. "github.com/onsi/gomega"    //nolint:revive //we want to use it for gomega
 
 	resty "github.com/go-resty/resty/v2"
 )
@@ -47,7 +47,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	})
 
 	When("Accessing resource, where user is allowed to access", func() {
-		It("should login with user/password and logout successfully", func(ctx context.Context) {
+		It("should login with user/password and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
 			resp := codeFlowLogin(rClient, proxyAddress+umaAllowedPath, http.StatusOK)
@@ -74,7 +74,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	})
 
 	When("Accessing resource, which does not exist", func() {
-		It("should be forbidden without permission ticket", func(ctx context.Context) {
+		It("should be forbidden without permission ticket", func(_ context.Context) {
 			rClient := resty.New()
 			resp := codeFlowLogin(rClient, proxyAddress+umaNonExistentPath, http.StatusForbidden)
 
@@ -84,7 +84,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	})
 
 	When("Accessing resource, which exists but user is not allowed and then allowed resource", func() {
-		It("should be forbidden and then allowed", func(ctx context.Context) {
+		It("should be forbidden and then allowed", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
 			resp := codeFlowLogin(rClient, proxyAddress+umaForbiddenPath, http.StatusForbidden)
@@ -143,7 +143,7 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 	})
 
 	When("Accessing resource, where user is allowed to access and then not allowed resource", func() {
-		It("should login with user/password, don't access forbidden resource and logout successfully", func(ctx context.Context) {
+		It("should login with user/password, don't access forbidden resource and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
 			resp := codeFlowLogin(rClient, proxyAddress+umaMethodAllowedPath, http.StatusOK)
@@ -223,7 +223,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 	})
 
 	When("Accessing resource, where user is allowed to access and then not allowed resource", func() {
-		It("should login with client secret, don't access forbidden resource", func(ctx context.Context) {
+		It("should login with client secret, don't access forbidden resource", func(_ context.Context) {
 			rClient := resty.New().SetRedirectPolicy(resty.NoRedirectPolicy())
 			rClient.SetProxy(fwdProxyAddress)
 			resp, err := rClient.R().Get(proxyAddress + umaFwdMethodAllowedPath)
@@ -305,7 +305,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 	})
 
 	When("Accessing resource, where user is allowed to access and then not allowed resource", func() {
-		It("should login with user/password, don't access forbidden resource", func(ctx context.Context) {
+		It("should login with user/password, don't access forbidden resource", func(_ context.Context) {
 			rClient := resty.New().SetRedirectPolicy(resty.NoRedirectPolicy())
 			rClient.SetProxy(fwdProxyAddress)
 			resp, err := rClient.R().Get(proxyAddress + umaMethodAllowedPath)
@@ -382,7 +382,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 	})
 
 	When("Accessing allowed resource", func() {
-		It("should be allowed and logout successfully", func(ctx context.Context) {
+		It("should be allowed and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{
@@ -405,7 +405,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 	})
 
 	When("Accessing not allowed resource", func() {
-		It("should be forbidden", func(ctx context.Context) {
+		It("should be forbidden", func(_ context.Context) {
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{
 				"X-Forwarded-Proto":  "http",
@@ -419,7 +419,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 	})
 
 	When("Accessing resource without X-Forwarded headers", func() {
-		It("should be forbidden", func(ctx context.Context) {
+		It("should be forbidden", func(_ context.Context) {
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{
 				"X-Forwarded-Proto": "http",

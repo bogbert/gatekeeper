@@ -48,7 +48,6 @@ type OauthProxy struct {
 	customSignInPage  func(wrt http.ResponseWriter, authURL string)
 	GetIdentity       func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error)
 	Cm                *cookie.Manager
-	WithOAuthURI      func(uri string) string
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string
 	newOAuth2Config   func(redirectionURL string) *oauth2.Config
 }

@@ -47,7 +47,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 
 	opaserver "github.com/open-policy-agent/opa/server"
 )
@@ -244,7 +244,6 @@ func TestAdminListener(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := newFakeKeycloakConfig()
 		t.Run(
 			testCase.Name,
@@ -579,7 +578,6 @@ func TestStrangeRoutingError(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -714,7 +712,6 @@ func TestStrangeAdminRequests(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -844,7 +841,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					ExpectedProxy: false,
 					HasToken:      true,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -901,7 +898,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					ExpectedProxy: false,
 					HasToken:      true,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -932,7 +929,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 						"x-test-header1": "validvalue",
 					},
 					ExpectedCode: http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -991,7 +988,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					ExpectedProxy: false,
 					HasToken:      true,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1024,7 +1021,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 						"x-test-header2": "validvalue",
 					},
 					ExpectedCode: http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1033,7 +1030,6 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 	}
 
 	for _, testCase := range requests {
-		testCase := testCase
 		c := *cfg
 		t.Run(
 			testCase.Name,
@@ -1415,7 +1411,6 @@ func TestRolePermissionsMiddleware(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -1622,7 +1617,6 @@ func TestRefreshToken(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfgCopy := *cfg
 		c := &cfgCopy
 		t.Run(
@@ -1649,7 +1643,7 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 		return false
 	}
 
-	token, err := jwt.ParseSigned(rawToken)
+	token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 
 	if err != nil {
 		return false
@@ -1671,7 +1665,7 @@ func checkRefreshTokenEncryption(_ *testing.T, cfg *config.Config, value string)
 		return false
 	}
 
-	_, err = jwt.ParseSigned(rawToken)
+	_, err = jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 
 	return err == nil
 }
@@ -1789,7 +1783,6 @@ func TestAccessTokenEncryption(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfgCopy := *cfg
 		c := &cfgCopy
 		t.Run(
@@ -1887,7 +1880,7 @@ func TestCustomHeadersHandlerNoProxyNoRedirects(t *testing.T) {
 					"X-Auth-Username": "rohith",
 				},
 				ExpectedCode: http.StatusOK,
-				ExpectedContent: func(body string, testNum int) {
+				ExpectedContent: func(body string, _ int) {
 					assert.Equal(t, "", body)
 				},
 			},
@@ -1915,7 +1908,7 @@ func TestCustomHeadersHandlerNoProxyNoRedirects(t *testing.T) {
 					"Custom-Header":      "rjayawardene",
 				},
 				ExpectedCode: http.StatusOK,
-				ExpectedContent: func(body string, testNum int) {
+				ExpectedContent: func(body string, _ int) {
 					assert.Equal(t, "", body)
 				},
 			},
@@ -2297,7 +2290,6 @@ func TestGzipCompression(t *testing.T) {
 	}
 
 	for _, testCase := range requests {
-		testCase := testCase
 		cfg := *cfg
 		cfg.Resources = []*authorization.Resource{{URL: "/admin*", Methods: utils.AllHTTPMethods}}
 
@@ -2338,7 +2330,7 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2362,7 +2354,7 @@ func TestEnableUma(t *testing.T) {
 					HasToken:           true,
 					ExpectedCode:       http.StatusForbidden,
 					TokenAuthorization: &models.Permissions{},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "")
 					},
 				},
@@ -2396,7 +2388,7 @@ func TestEnableUma(t *testing.T) {
 							},
 						},
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
 					},
@@ -2429,7 +2421,7 @@ func TestEnableUma(t *testing.T) {
 							},
 						},
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
 					},
@@ -2462,7 +2454,7 @@ func TestEnableUma(t *testing.T) {
 							},
 						},
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
 					},
@@ -2473,7 +2465,6 @@ func TestEnableUma(t *testing.T) {
 	}
 
 	for _, testCase := range requests {
-		testCase := testCase
 		c := *cfg
 		t.Run(
 			testCase.Name,
@@ -2515,6 +2506,7 @@ func TestLogRealIP(t *testing.T) {
 
 	cfg := newFakeKeycloakConfig()
 	cfg.EnableLogging = true
+	cfg.Verbose = true
 
 	var buffer bytes.Buffer
 	writer := bufio.NewWriter(&buffer)
@@ -2537,7 +2529,7 @@ func TestLogRealIP(t *testing.T) {
 		proxy, _ := proxy.NewProxy(cfg, testLog, &FakeUpstreamService{})
 		_ = proxy.Run()
 
-		cfg.RedirectionURL = fmt.Sprintf("http://%s", proxy.Listener.Addr().String())
+		cfg.RedirectionURL = "http://" + proxy.Listener.Addr().String()
 		fp := &fakeProxy{cfg, auth, proxy, make(map[string]*http.Cookie)}
 		fp.RunTests(t, []fakeRequest{req})
 
@@ -2595,7 +2587,7 @@ func TestEnableOpa(t *testing.T) {
 					HasToken:     true,
 					Redirects:    false,
 					ExpectedCode: http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
 						assert.Contains(t, body, "Whatever")
@@ -2631,7 +2623,7 @@ func TestEnableOpa(t *testing.T) {
 					HasToken:      true,
 					Redirects:     false,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2664,7 +2656,7 @@ func TestEnableOpa(t *testing.T) {
 					HasToken:      true,
 					Redirects:     false,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2688,7 +2680,7 @@ func TestEnableOpa(t *testing.T) {
 					HasToken:      true,
 					Redirects:     false,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2712,7 +2704,7 @@ func TestEnableOpa(t *testing.T) {
 					HasToken:      true,
 					Redirects:     true,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2738,7 +2730,7 @@ func TestEnableOpa(t *testing.T) {
 					HasToken:      true,
 					Redirects:     true,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "Permission Denied")
 					},
 				},
@@ -2763,7 +2755,7 @@ func TestEnableOpa(t *testing.T) {
 					OnResponse:    delay,
 					Redirects:     true,
 					ExpectedCode:  http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
 					},
@@ -2774,7 +2766,7 @@ func TestEnableOpa(t *testing.T) {
 					HasLogin:      false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
 					},
@@ -2795,7 +2787,6 @@ func TestEnableOpa(t *testing.T) {
 	}
 
 	for _, testCase := range requests {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2924,7 +2915,6 @@ func TestAuthenticationMiddleware(t *testing.T) {
 	}
 
 	for _, testCase := range requests {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {

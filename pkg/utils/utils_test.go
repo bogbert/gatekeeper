@@ -324,7 +324,7 @@ func TestContainsSubString(t *testing.T) {
 }
 
 func BenchmarkContainsSubString(t *testing.B) {
-	for n := 0; n < t.N; n++ {
+	for range t.N {
 		ContainsSubString("svc.cluster.local", []string{"nginx.pr1.svc.cluster.local"})
 	}
 }

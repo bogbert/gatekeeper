@@ -103,25 +103,24 @@ func LoggingMiddleware(
 				return
 			}
 
+			addr := utils.RealIP(req)
 			if verbose {
 				requestLogger := logger.With(
 					zap.Any("headers", req.Header),
 					zap.String("path", req.URL.Path),
 					zap.String("method", req.Method),
+					zap.String("client_ip", addr),
 				)
 				scope.Logger = requestLogger
 			}
 
 			next.ServeHTTP(resp, req)
 
-			addr := utils.RealIP(req)
-
 			if req.URL.Path == req.URL.RawPath || req.URL.RawPath == "" {
 				scope.Logger.Info("client request",
 					zap.Duration("latency", time.Since(start)),
 					zap.Int("status", resp.Status()),
 					zap.Int("bytes", resp.BytesWritten()),
-					zap.String("client_ip", addr),
 					zap.String("remote_addr", req.RemoteAddr),
 					zap.String("method", req.Method),
 					zap.String("path", req.URL.Path))
@@ -130,7 +129,6 @@ func LoggingMiddleware(
 					zap.Duration("latency", time.Since(start)),
 					zap.Int("status", resp.Status()),
 					zap.Int("bytes", resp.BytesWritten()),
-					zap.String("client_ip", addr),
 					zap.String("remote_addr", req.RemoteAddr),
 					zap.String("method", req.Method),
 					zap.String("path", req.URL.Path),
@@ -234,7 +232,7 @@ func IdentityHeadersMiddleware(
 		if len(xslices) > minSliceLength {
 			customClaims[val] = utils.ToHeader(xslices[1])
 		} else {
-			customClaims[val] = fmt.Sprintf("X-Auth-%s", utils.ToHeader(val))
+			customClaims[val] = "X-Auth-" + utils.ToHeader(val)
 		}
 	}
 
@@ -257,7 +255,7 @@ func IdentityHeadersMiddleware(
 				user := scope.Identity
 				headers.Set("X-Auth-Audience", strings.Join(user.Audiences, ","))
 				headers.Set("X-Auth-Email", user.Email)
-				headers.Set("X-Auth-ExpiresIn", user.ExpiresAt.String())
+				headers.Set("X-Auth-Expiresin", user.ExpiresAt.String())
 				headers.Set("X-Auth-Groups", strings.Join(user.Groups, ","))
 				headers.Set("X-Auth-Roles", strings.Join(user.Roles, ","))
 				headers.Set("X-Auth-Subject", user.ID)
@@ -270,7 +268,7 @@ func IdentityHeadersMiddleware(
 				}
 				// add the authorization header if requested
 				if enableAuthzHeader {
-					headers.Set("Authorization", fmt.Sprintf("Bearer %s", user.RawToken))
+					headers.Set("Authorization", "Bearer "+user.RawToken)
 				}
 				// are we filtering out the cookies
 				if !enableAuthzCookies {
@@ -373,6 +371,26 @@ func ProxyMiddleware(
 			}
 
 			upstream.ServeHTTP(wrt, req)
+		})
+	}
+}
+
+// ForwardAuthMiddleware
+func ForwardAuthMiddleware(logger *zap.Logger, oAuthURI string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		logger.Info("enabling the forward-auth middleware")
+
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			if !strings.Contains(req.URL.Path, oAuthURI) { // this condition is here only because of tests to work
+				if forwardedPath := req.Header.Get("X-Forwarded-Uri"); forwardedPath != "" {
+					req.URL.Path = forwardedPath
+					req.URL.RawPath = forwardedPath
+				}
+				if forwardedMethod := req.Header.Get("X-Forwarded-Method"); forwardedMethod != "" {
+					req.Method = forwardedMethod
+				}
+			}
+			next.ServeHTTP(wrt, req)
 		})
 	}
 }

@@ -209,7 +209,7 @@ func TestExternalOpa(t *testing.T) {
 					return nil, err
 				}
 
-				httpReq.Header.Add("X-CUSTOM", "TESTVALUE")
+				httpReq.Header.Add("X-Custom", "TESTVALUE")
 				return httpReq, nil
 			},
 			AuthzPolicy: `
@@ -229,7 +229,6 @@ func TestExternalOpa(t *testing.T) {
 	}
 
 	for _, testCase := range requests {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {

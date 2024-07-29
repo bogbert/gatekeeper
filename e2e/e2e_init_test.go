@@ -3,11 +3,11 @@ package e2e_test
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo/v2"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
-var _ = BeforeSuite(func(ctx context.Context) {
+var _ = ginkgo.BeforeSuite(func(_ context.Context) {
 })
 
-var _ = AfterSuite(func() {
+var _ = ginkgo.AfterSuite(func() {
 })

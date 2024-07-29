@@ -24,7 +24,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -259,7 +259,7 @@ func TokenHandler(
 			return
 		}
 
-		token, err := jwt.ParseSigned(user.RawToken)
+		token, err := jwt.ParseSigned(user.RawToken, constant.SignatureAlgs[:])
 		if err != nil {
 			accessError(wrt, req)
 			return

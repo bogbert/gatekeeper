@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -62,7 +62,7 @@ func GetTokenInRequest(
 	}
 
 	// step: check for a token in the authorization header
-	if err != nil || (err == nil && skipAuthorizationHeaderIdentity) {
+	if err != nil || skipAuthorizationHeaderIdentity {
 		if token, err = GetTokenInCookie(req, name); err != nil {
 			return token, false, err
 		}
@@ -80,7 +80,8 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 	}
 
 	items := strings.Split(token, " ")
-	if len(items) != 2 {
+	numItems := 2
+	if len(items) != numItems {
 		return "", apperrors.ErrInvalidSession
 	}
 
@@ -151,7 +152,7 @@ func GetIdentity(
 		}
 
 		rawToken := access
-		token, err := jwt.ParseSigned(access)
+		token, err := jwt.ParseSigned(access, constant.SignatureAlgs[:])
 		if err != nil {
 			return nil, err
 		}
@@ -288,7 +289,7 @@ func GetAccessCookieExpiration(
 	// refresh token
 	duration := accessTokenDuration
 
-	webToken, err := jwt.ParseSigned(refresh)
+	webToken, err := jwt.ParseSigned(refresh, constant.SignatureAlgs[:])
 	if err != nil {
 		logger.Error("unable to parse token")
 	}
@@ -328,7 +329,7 @@ func GetCodeFlowTokens(
 
 	if code == "" {
 		accessError(writer, req)
-		return "", "", "", fmt.Errorf("missing auth code")
+		return "", "", "", apperrors.ErrMissingAuthCode
 	}
 
 	conf := newOAuth2Config(getRedirectionURL(writer, req))

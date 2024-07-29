@@ -37,7 +37,6 @@ import (
 
 var _ core.Configs = &Config{}
 
-//nolint:musttag
 type Config struct {
 	core.CommonConfig
 	// ConfigFile is the binding interface
@@ -336,59 +335,57 @@ func NewDefaultConfig() *Config {
 	hostnames = append(hostnames, []string{"localhost", "127.0.0.1", "::1"}...)
 
 	return &Config{
-		AccessTokenDuration:           time.Duration(720) * time.Hour,
+		AccessTokenDuration:           time.Duration(constant.FallbackAccessTokenDuration) * time.Hour,
 		CookieAccessName:              constant.AccessCookie,
 		CookieIDTokenName:             constant.IDTokenCookie,
 		CookieRefreshName:             constant.RefreshCookie,
 		CookieOAuthStateName:          constant.RequestStateCookie,
 		CookieRequestURIName:          constant.RequestURICookie,
 		CookiePKCEName:                constant.PKCECookie,
-		CookieUMAName:                 constant.UMACookie,
 		EnableAuthorizationCookies:    true,
 		EnableAuthorizationHeader:     true,
 		EnableDefaultDeny:             true,
 		EnableSessionCookies:          true,
 		EnableTokenHeader:             true,
-		EnableIDPSessionCheck:         true,
 		HTTPOnlyCookie:                true,
 		Headers:                       make(map[string]string),
 		AllowedQueryParams:            make(map[string]string),
 		DefaultAllowedQueryParams:     make(map[string]string),
 		LetsEncryptCacheDir:           "./cache/",
 		MatchClaims:                   make(map[string]string),
-		MaxIdleConns:                  100,
-		MaxIdleConnsPerHost:           50,
+		MaxIdleConns:                  constant.DefaultMaxIdleConns,
+		MaxIdleConnsPerHost:           constant.DefaultMaxIdleConnsPerHost,
 		OAuthURI:                      "/oauth",
-		OpenIDProviderTimeout:         30 * time.Second,
-		OpenIDProviderRetryCount:      3,
+		OpenIDProviderTimeout:         constant.DefaultOpenIDProviderTimeout,
+		OpenIDProviderRetryCount:      constant.DefaultOpenIDProviderRetryCount,
 		PreserveHost:                  false,
-		SelfSignedTLSExpiration:       3 * time.Hour,
+		SelfSignedTLSExpiration:       constant.DefaultSelfSignedTLSExpiration,
 		SelfSignedTLSHostnames:        hostnames,
 		RequestIDHeader:               "X-Request-ID",
 		ResponseHeaders:               make(map[string]string),
 		SameSiteCookie:                constant.SameSiteLax,
 		Scopes:                        []string{"email", "profile"},
 		SecureCookie:                  true,
-		ServerIdleTimeout:             120 * time.Second,
-		ServerReadTimeout:             10 * time.Second,
-		ServerWriteTimeout:            10 * time.Second,
+		ServerIdleTimeout:             constant.DefaultServerIdleTimeout,
+		ServerReadTimeout:             constant.DefaultServerReadTimeout,
+		ServerWriteTimeout:            constant.DefaultServerWriteTimeout,
 		SkipOpenIDProviderTLSVerify:   false,
 		SkipUpstreamTLSVerify:         true,
 		SkipAccessTokenIssuerCheck:    true,
 		SkipAccessTokenClientIDCheck:  true,
 		Tags:                          make(map[string]string),
 		TLSMinVersion:                 "tlsv1.3",
-		UpstreamExpectContinueTimeout: 10 * time.Second,
-		UpstreamKeepaliveTimeout:      10 * time.Second,
+		UpstreamExpectContinueTimeout: constant.DefaultUpstreamExpectContinueTimeout,
+		UpstreamKeepaliveTimeout:      constant.DefaultUpstreamKeepaliveTimeout,
 		UpstreamKeepalives:            true,
-		UpstreamResponseHeaderTimeout: 10 * time.Second,
-		UpstreamTLSHandshakeTimeout:   10 * time.Second,
-		UpstreamTimeout:               10 * time.Second,
+		UpstreamResponseHeaderTimeout: constant.DefaultUpstreamResponseHeaderTimeout,
+		UpstreamTLSHandshakeTimeout:   constant.DefaultUpstreamTLSHandshakeTimeout,
+		UpstreamTimeout:               constant.DefaultUpstreamTimeout,
 		UseLetsEncrypt:                false,
 		ForwardingGrantType:           core.GrantTypeUserCreds,
-		PatRetryCount:                 5,
-		PatRetryInterval:              10 * time.Second,
-		OpaTimeout:                    10 * time.Second,
+		PatRetryCount:                 constant.DefaultPatRetryCount,
+		PatRetryInterval:              constant.DefaultPatRetryInterval,
+		OpaTimeout:                    constant.DefaultOpaTimeout,
 	}
 }
 
@@ -430,6 +427,7 @@ func (r *Config) ReadConfigFile(filename string) error {
 	// step: attempt to un-marshal the data
 	switch ext := filepath.Ext(filename); ext {
 	case "json":
+		//nolint:musttag
 		err = json.Unmarshal(content, r)
 	default:
 		err = yaml.Unmarshal(content, r)

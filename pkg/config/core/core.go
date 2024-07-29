@@ -1,6 +1,7 @@
 package core
 
 import (
+	"io/fs"
 	"os"
 	"testing"
 
@@ -18,10 +19,10 @@ const (
 type OpenIDProviderRetryCount int
 
 type Configs interface {
-	ReadConfigFile(string) error
+	ReadConfigFile(filename string) error
 	IsValid() error
 	GetResources() []*authorization.Resource
-	SetResources([]*authorization.Resource)
+	SetResources(resources []*authorization.Resource)
 	GetHeaders() map[string]string
 	GetMatchClaims() map[string]string
 	GetTags() map[string]string
@@ -38,7 +39,8 @@ func WriteFakeConfigFile(t *testing.T, content string) *os.File {
 	}
 	file.Close()
 
-	if err := os.WriteFile(file.Name(), []byte(content), 0600); err != nil {
+	var perms fs.FileMode = 0600
+	if err := os.WriteFile(file.Name(), []byte(content), perms); err != nil {
 		t.Fatalf("unexpected error writing node label file: %v", err)
 	}
 

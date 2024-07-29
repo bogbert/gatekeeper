@@ -25,7 +25,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
@@ -99,7 +99,7 @@ func getPAT(
 				"Chosen grant type is not supported",
 				zap.String("grant_type", grantType),
 			)
-			os.Exit(11)
+			os.Exit(1)
 		}
 
 		if err != nil {
@@ -108,7 +108,7 @@ func getPAT(
 
 			if retry >= patRetryCount {
 				cancel()
-				os.Exit(10)
+				os.Exit(1)
 			}
 
 			<-time.After(patRetryInterval)
@@ -125,7 +125,7 @@ func getPAT(
 
 		initialized = true
 
-		parsedToken, err := jwt.ParseSigned(token.AccessToken)
+		parsedToken, err := jwt.ParseSigned(token.AccessToken, constant.SignatureAlgs[:])
 		if err != nil {
 			retry++
 			logger.Error("failed to parse the access token", zap.Error(err))
@@ -144,7 +144,7 @@ func getPAT(
 
 		retry = 0
 		expiration := stdClaims.Expiry.Time()
-		refreshIn := utils.GetWithin(expiration, 0.85)
+		refreshIn := utils.GetWithin(expiration, constant.PATRefreshInPercent)
 
 		logger.Info(
 			"waiting for expiration of access token",
@@ -324,7 +324,7 @@ func refreshUmaToken(
 		return nil, err
 	}
 
-	token, err := jwt.ParseSigned(tok.AccessToken)
+	token, err := jwt.ParseSigned(tok.AccessToken, constant.SignatureAlgs[:])
 	if err != nil {
 		return nil, err
 	}

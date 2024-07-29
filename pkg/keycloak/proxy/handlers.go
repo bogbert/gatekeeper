@@ -30,7 +30,8 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -90,7 +91,7 @@ func oauthAuthorizationHandler(
 		}
 
 		if enablePKCE {
-			codeVerifier, err := pkce.NewCodeVerifierWithLength(96)
+			codeVerifier, err := pkce.NewCodeVerifierWithLength(constant.PKCECodeVerifierLength)
 			if err != nil {
 				logger.Error(
 					apperrors.ErrPKCECodeCreation.Error(),
@@ -407,13 +408,13 @@ func loginHandler(
 			return
 		}
 
-		code, err := func() (int, error) {
-			ctx, cancel := context.WithTimeout(
-				req.Context(),
-				openIDProviderTimeout,
-			)
-			defer cancel()
+		ctx, cancel := context.WithTimeout(
+			req.Context(),
+			openIDProviderTimeout,
+		)
+		defer cancel()
 
+		code, err := func(context.Context) (int, error) {
 			ctx = context.WithValue(
 				ctx,
 				oauth2.HTTPClient,
@@ -452,7 +453,7 @@ func loginHandler(
 
 			accessToken := token.AccessToken
 			refreshToken := ""
-			accessTokenObj, err := jwt.ParseSigned(token.AccessToken)
+			accessTokenObj, err := jwt.ParseSigned(token.AccessToken, []jose.SignatureAlgorithm{jose.RS256})
 			if err != nil {
 				return http.StatusNotImplemented,
 					errors.Join(apperrors.ErrParseAccessToken, err)
@@ -523,7 +524,7 @@ func loginHandler(
 				var expiration time.Duration
 				// notes: not all idp refresh tokens are readable, google for example, so we attempt to decode into
 				// a jwt and if possible extract the expiration, else we default to 10 days
-				refreshTokenObj, errRef := jwt.ParseSigned(token.RefreshToken)
+				refreshTokenObj, errRef := jwt.ParseSigned(token.RefreshToken, constant.SignatureAlgs[:])
 				if errRef != nil {
 					return http.StatusInternalServerError,
 						errors.Join(apperrors.ErrParseRefreshToken, err)
@@ -540,7 +541,9 @@ func loginHandler(
 
 				switch store != nil {
 				case true:
-					if err = store.Set(req.Context(), utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
+					rCtx, rCancel := context.WithTimeout(ctx, constant.RedisTimeout)
+					defer rCancel()
+					if err = store.Set(rCtx, utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
 						scope.Logger.Error(
 							apperrors.ErrSaveTokToStore.Error(),
 							zap.Error(err),
@@ -607,12 +610,10 @@ func loginHandler(
 			}
 
 			return http.StatusOK, nil
-		}()
+		}(ctx)
 
 		if err != nil {
-			clientIP := utils.RealIP(req)
 			scope.Logger.Error(err.Error(),
-				zap.String("client_ip", clientIP),
 				zap.String("remote_addr", req.RemoteAddr),
 			)
 			writer.WriteHeader(code)
@@ -719,14 +720,16 @@ func logoutHandler(
 
 		// step: check if the user has a state session and if so revoke it
 		if store != nil {
-			go func() {
-				if err := store.Delete(req.Context(), utils.GetHashKey(user.RawToken)); err != nil {
+			go func(ctx context.Context) {
+				rCtx, rCancel := context.WithTimeout(ctx, constant.RedisTimeout)
+				defer rCancel()
+				if err := store.Delete(rCtx, utils.GetHashKey(user.RawToken)); err != nil {
 					scope.Logger.Error(
 						apperrors.ErrDelTokFromStore.Error(),
 						zap.Error(err),
 					)
 				}
-			}()
+			}(req.Context())
 		}
 
 		// @check if we should redirect to the provider
@@ -761,14 +764,11 @@ func logoutHandler(
 		}
 
 		// set the default revocation url
-		revokeDefault := fmt.Sprintf(
-			"%s/protocol/openid-connect/revoke",
-			strings.TrimSuffix(
-				discoveryURL,
-				"/.well-known/openid-configuration",
-			),
+		endpoint := strings.TrimSuffix(
+			discoveryURL,
+			"/.well-known/openid-configuration",
 		)
-
+		revokeDefault := endpoint + constant.IdpRevokeURI
 		revocationURL := utils.DefaultTo(revocationEndpoint, revokeDefault)
 
 		// step: do we have a revocation endpoint?
@@ -781,9 +781,7 @@ func logoutHandler(
 			request, err := http.NewRequest(
 				http.MethodPost,
 				revocationURL,
-				bytes.NewBufferString(
-					fmt.Sprintf("token=%s", identityToken),
-				),
+				bytes.NewBufferString("token="+identityToken),
 			)
 			if err != nil {
 				scope.Logger.Error(apperrors.ErrCreateRevocationReq.Error(), zap.Error(err))
@@ -813,7 +811,7 @@ func logoutHandler(
 			case http.StatusOK:
 				scope.Logger.Info(
 					"successfully logged out of the endpoint",
-					zap.String("email", user.Email),
+					zap.String("userID", user.ID),
 				)
 			default:
 				content, _ := io.ReadAll(response.Body)

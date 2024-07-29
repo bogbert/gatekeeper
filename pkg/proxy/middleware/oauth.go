@@ -8,7 +8,7 @@ import (
 	"time"
 
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -57,7 +57,6 @@ func AuthenticationMiddleware(
 				return
 			}
 
-			clientIP := utils.RealIP(req)
 			scope.Logger.Debug("authentication middleware")
 
 			// grab the user identity from the request
@@ -71,9 +70,7 @@ func AuthenticationMiddleware(
 			scope.Identity = user
 			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
 			lLog := scope.Logger.With(
-				zap.String("client_ip", clientIP),
 				zap.String("remote_addr", req.RemoteAddr),
-				zap.String("username", user.Name),
 				zap.String("sub", user.ID),
 				zap.String("expired_on", user.ExpiresAt.String()),
 			)

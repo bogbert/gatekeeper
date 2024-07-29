@@ -296,7 +296,6 @@ func TestIsListenValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -343,7 +342,6 @@ func TestIsListenAdminSchemeValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -398,7 +396,6 @@ func TestIsOpenIDProviderProxyValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -461,7 +458,6 @@ func TestIsMaxIdlleConnValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -522,7 +518,6 @@ func TestIsSameSiteValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -669,7 +664,6 @@ func TestIsTLSFilesValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -875,7 +869,6 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -983,7 +976,6 @@ func TestIsLetsEncryptValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1078,7 +1070,6 @@ func TestIsForwardingProxySettingsValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1134,7 +1125,6 @@ func TestIsReverseProxySettingsValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1186,7 +1176,6 @@ func TestIsTokenVerificationSettingsValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1261,7 +1250,6 @@ func TestIsTLSMinValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1312,7 +1300,6 @@ func TestIsNoProxyValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1368,7 +1355,6 @@ func TestIsUpstreamValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1415,7 +1401,6 @@ func TestIsUpstreamProxyValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1455,7 +1440,6 @@ func TestIsClientIDValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1495,7 +1479,6 @@ func TestIsDiscoveryURLValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1573,7 +1556,6 @@ func TestIsForwardingGrantValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1651,7 +1633,6 @@ func TestIsSecurityFilterValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1720,7 +1701,6 @@ func TestIsTokenEncryptionValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1764,7 +1744,6 @@ func TestIsSecureCookieValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1804,7 +1783,6 @@ func TestIsStoreURLValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1942,7 +1920,6 @@ func TestIsResourceValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1986,7 +1963,6 @@ func TestIsMatchClaimValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2077,7 +2053,6 @@ func TestExternalAuthzValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2117,7 +2092,6 @@ func TestUpdateDiscoveryURI(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2208,7 +2182,6 @@ func TestExtractDiscoveryURIComponents(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2282,7 +2255,6 @@ func TestDefaultDenyValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2324,7 +2296,6 @@ func TestIsPKCEValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2379,7 +2350,6 @@ func TestIsPostLoginRedirectValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2421,7 +2391,6 @@ func TestIsEnableHmacValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2463,7 +2432,6 @@ func TestIsPostLogoutRedirectURIValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -2555,7 +2523,6 @@ func TestIsAllowedQueryParamsValid(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {

@@ -470,7 +470,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.12.1
+  image: quay.io/gogatekeeper/gatekeeper:2.14.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -497,7 +497,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.12.1
+  image: quay.io/gogatekeeper/gatekeeper:2.14.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -1283,6 +1283,13 @@ services. To make this possible with gatekeeper you can enable header logging
 by enabling `--enable-logging` and `--verbose` options. Also you can use `request-id-header`
 and `enable-request-id` options, which will generate unique uuid and will inject in
 header supplied in `request-id-header` option.
+
+## Logs and GDPR
+
+You can enable/disable logging by specifying `--enable-logging` option. This will log all
+messages with info log level and higher. It will NOT log any personal sensitive information, like client IP or user email. When you would like to see debug messages you need to use `--verbose=true` option.
+
+**IMPORTANT**: debug messages WILL contain personal information, for easier debugging
 
 ## Metrics
 

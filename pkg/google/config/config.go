@@ -36,10 +36,7 @@ import (
 )
 
 // Config is the configuration for the proxy
-//
-//nolint:musttag
 type Config struct {
-	core.CommonConfig
 	// ConfigFile is the binding interface
 	ConfigFile string `env:"CONFIG_FILE" json:"config" usage:"path the a configuration file" yaml:"config"`
 	// Listen defines the binding interface for main listener, e.g. {address}:{port}. This is required and there is no default value.
@@ -322,7 +319,7 @@ func NewDefaultConfig() *Config {
 	hostnames = append(hostnames, []string{"localhost", "127.0.0.1", "::1"}...)
 
 	return &Config{
-		AccessTokenDuration:           time.Duration(720) * time.Hour,
+		AccessTokenDuration:           time.Duration(constant.FallbackAccessTokenDuration) * time.Hour,
 		CookieAccessName:              constant.AccessCookie,
 		CookieIDTokenName:             constant.IDTokenCookie,
 		CookieRefreshName:             constant.RefreshCookie,
@@ -340,39 +337,39 @@ func NewDefaultConfig() *Config {
 		DefaultAllowedQueryParams:     make(map[string]string),
 		LetsEncryptCacheDir:           "./cache/",
 		MatchClaims:                   make(map[string]string),
-		MaxIdleConns:                  100,
-		MaxIdleConnsPerHost:           50,
+		MaxIdleConns:                  constant.DefaultMaxIdleConns,
+		MaxIdleConnsPerHost:           constant.DefaultMaxIdleConnsPerHost,
 		OAuthURI:                      "/oauth",
-		OpenIDProviderTimeout:         30 * time.Second,
-		OpenIDProviderRetryCount:      3,
+		OpenIDProviderTimeout:         constant.DefaultOpenIDProviderTimeout,
+		OpenIDProviderRetryCount:      constant.DefaultOpenIDProviderRetryCount,
 		PreserveHost:                  false,
-		SelfSignedTLSExpiration:       3 * time.Hour,
+		SelfSignedTLSExpiration:       constant.DefaultSelfSignedTLSExpiration,
 		SelfSignedTLSHostnames:        hostnames,
 		RequestIDHeader:               "X-Request-ID",
 		ResponseHeaders:               make(map[string]string),
 		SameSiteCookie:                constant.SameSiteLax,
 		Scopes:                        []string{"email", "profile"},
 		SecureCookie:                  true,
-		ServerIdleTimeout:             120 * time.Second,
-		ServerReadTimeout:             10 * time.Second,
-		ServerWriteTimeout:            10 * time.Second,
+		ServerIdleTimeout:             constant.DefaultServerIdleTimeout,
+		ServerReadTimeout:             constant.DefaultServerReadTimeout,
+		ServerWriteTimeout:            constant.DefaultServerWriteTimeout,
 		SkipOpenIDProviderTLSVerify:   false,
 		SkipUpstreamTLSVerify:         true,
 		SkipAccessTokenIssuerCheck:    true,
 		SkipAccessTokenClientIDCheck:  true,
 		Tags:                          make(map[string]string),
 		TLSMinVersion:                 "tlsv1.3",
-		UpstreamExpectContinueTimeout: 10 * time.Second,
-		UpstreamKeepaliveTimeout:      10 * time.Second,
+		UpstreamExpectContinueTimeout: constant.DefaultUpstreamExpectContinueTimeout,
+		UpstreamKeepaliveTimeout:      constant.DefaultUpstreamKeepaliveTimeout,
 		UpstreamKeepalives:            true,
-		UpstreamResponseHeaderTimeout: 10 * time.Second,
-		UpstreamTLSHandshakeTimeout:   10 * time.Second,
-		UpstreamTimeout:               10 * time.Second,
+		UpstreamResponseHeaderTimeout: constant.DefaultUpstreamResponseHeaderTimeout,
+		UpstreamTLSHandshakeTimeout:   constant.DefaultUpstreamTLSHandshakeTimeout,
+		UpstreamTimeout:               constant.DefaultUpstreamTimeout,
 		UseLetsEncrypt:                false,
 		ForwardingGrantType:           core.GrantTypeUserCreds,
-		PatRetryCount:                 5,
-		PatRetryInterval:              10 * time.Second,
-		OpaTimeout:                    10 * time.Second,
+		PatRetryCount:                 constant.DefaultPatRetryCount,
+		PatRetryInterval:              constant.DefaultPatRetryInterval,
+		OpaTimeout:                    constant.DefaultOpaTimeout,
 	}
 }
 
@@ -414,22 +411,13 @@ func (r *Config) ReadConfigFile(filename string) error {
 	// step: attempt to un-marshal the data
 	switch ext := filepath.Ext(filename); ext {
 	case "json":
+		//nolint:musttag
 		err = json.Unmarshal(content, r)
 	default:
 		err = yaml.Unmarshal(content, r)
 	}
 
 	return err
-}
-
-// WithOAuthURI returns the oauth uri
-func (r *Config) WithOAuthURI(uri string) string {
-	uri = strings.TrimPrefix(uri, "/")
-	if r.BaseURI != "" {
-		return fmt.Sprintf("%s/%s/%s", r.BaseURI, r.OAuthURI, uri)
-	}
-
-	return fmt.Sprintf("%s/%s", r.OAuthURI, uri)
 }
 
 func (r *Config) Update() error {
@@ -624,7 +612,7 @@ func (r *Config) isAdminTLSFilesValid() error {
 
 func (r *Config) isLetsEncryptValid() error {
 	if r.UseLetsEncrypt && r.LetsEncryptCacheDir == "" {
-		return fmt.Errorf("the letsencrypt cache dir has not been set")
+		return apperrors.ErrLetsEncryptMissingCacheDir
 	}
 	return nil
 }
@@ -632,13 +620,13 @@ func (r *Config) isLetsEncryptValid() error {
 func (r *Config) isTLSMinValid() error {
 	switch strings.ToLower(r.TLSMinVersion) {
 	case "":
-		return fmt.Errorf("minimal TLS version should not be empty")
+		return apperrors.ErrMinimalTLSVersionEmpty
 	case "tlsv1.0":
 	case "tlsv1.1":
 	case "tlsv1.2":
 	case "tlsv1.3":
 	default:
-		return fmt.Errorf("invalid minimal TLS version specified")
+		return apperrors.ErrInvalidMinimalTLSVersion
 	}
 	return nil
 }

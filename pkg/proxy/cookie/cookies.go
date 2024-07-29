@@ -93,7 +93,7 @@ func (cm *Manager) GetMaxCookieChunkLength(
 	req *http.Request,
 	cookieName string,
 ) int {
-	maxCookieChunkLength := 4069 - len(cookieName)
+	maxCookieChunkLength := constant.CookiesPerDomainSize - len(cookieName)
 
 	if cm.CookieDomain != "" {
 		maxCookieChunkLength -= len(cm.CookieDomain)

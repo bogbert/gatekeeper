@@ -17,8 +17,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	jose2 "github.com/go-jose/go-jose/v3"
-	"github.com/go-jose/go-jose/v3/jwt"
+	jose2 "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
@@ -68,7 +68,7 @@ var defTestTokenClaims = DefaultTestTokenClaims{
 	FamilyName:        "Jayawardene",
 	GivenName:         "Rohith",
 	Username:          "Jayawardene",
-	Iat:               1450372669,
+	Iat:               DefaultIat,
 	Iss:               "test",
 	Jti:               "4ee75b8e-3ee6-4382-92d4-3390b4b4937b",
 	Name:              "Rohith Jayawardene",
@@ -126,7 +126,7 @@ func (t *FakeToken) GetToken() (string, error) {
 	}
 
 	b := jwt.Signed(signer).Claims(&t.Claims)
-	jwt, err := b.CompactSerialize()
+	jwt, err := b.Serialize()
 	if err != nil {
 		return "", err
 	}
@@ -158,7 +158,7 @@ func (t *FakeToken) GetUnsignedToken() (string, error) {
 	}
 
 	b := jwt.Signed(signer).Claims(&t.Claims)
-	jwt, err := b.CompactSerialize()
+	jwt, err := b.Serialize()
 
 	if err != nil {
 		return "", err
@@ -327,7 +327,7 @@ func newFakeAuthServer(config *fakeAuthConfig) *fakeAuthServer {
 		},
 	}
 
-	baseURI := fmt.Sprintf("%s/realms/hod-test", config.DiscoveryURLPrefix)
+	baseURI := config.DiscoveryURLPrefix + "/realms/hod-test"
 
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
@@ -449,7 +449,7 @@ func (r *fakeAuthServer) authHandler(wrt http.ResponseWriter, req *http.Request)
 		state = "/"
 	}
 
-	randString, err := getRandomString(32)
+	randString, err := getRandomString(OAuthCodeLength)
 
 	if err != nil {
 		wrt.WriteHeader(http.StatusInternalServerError)
@@ -479,12 +479,13 @@ func (r *fakeAuthServer) revocationHandler(wrt http.ResponseWriter, req *http.Re
 
 func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Request) {
 	items := strings.Split(req.Header.Get("Authorization"), " ")
-	if len(items) != 2 {
+	authItems := 2
+	if len(items) != authItems {
 		wrt.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	token, err := jwt.ParseSigned(items[1])
+	token, err := jwt.ParseSigned(items[1], constant.SignatureAlgs[:])
 
 	if err != nil {
 		wrt.WriteHeader(http.StatusUnauthorized)
@@ -517,7 +518,8 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 //nolint:cyclop
 func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Request) {
 	expires := time.Now().Add(r.expiration)
-	refreshExpires := time.Now().Add(2 * r.expiration)
+	refreshExpirationFactor := 2
+	refreshExpires := time.Now().Add(time.Duration(refreshExpirationFactor) * r.expiration)
 	token := NewTestToken(r.getLocation())
 	token.SetExpiration(expires)
 	refreshToken := NewTestToken(r.getLocation())
@@ -615,7 +617,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			"error_description": "invalid client credentials",
 		})
 	case configcore.GrantTypeRefreshToken:
-		oldRefreshToken, err := jwt.ParseSigned(req.FormValue("refresh_token"))
+		oldRefreshToken, err := jwt.ParseSigned(req.FormValue("refresh_token"), constant.SignatureAlgs[:])
 
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)

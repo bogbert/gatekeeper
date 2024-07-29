@@ -35,6 +35,7 @@ var (
 	ErrPKCECodeCreation                = errors.New("creation of code verifier failed")
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
 	ErrQueryParamValueMismatch         = errors.New("query param value is not allowed")
+	ErrMissingAuthCode                 = errors.New("missing auth code")
 
 	ErrSessionExpiredVerifyOff  = errors.New("the session has expired and verification switch off")
 	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")
@@ -152,4 +153,10 @@ var (
 	ErrTooManyDefaultAllowedQueryParams     = errors.New("you have more default query params than allowed query params")
 	ErrMissingDefaultQueryParamInAllowed    = errors.New("param is present in default query params but missing in allowed")
 	ErrDefaultQueryParamNotAllowed          = errors.New("default query param is not in allowed query params")
+
+	ErrCertSelfNoHostname    = errors.New("no hostnames specified")
+	ErrCertSelfLowExpiration = errors.New("expiration must be greater then 5 minutes")
+
+	ErrLetsEncryptMissingCacheDir = errors.New("letsencrypt cache dir has not been set")
+	ErrHijackerMethodMissing      = errors.New("writer does not implement http.Hijacker method")
 )

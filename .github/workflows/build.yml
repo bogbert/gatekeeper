@@ -10,7 +10,7 @@ jobs:
     # Test the latest release of Go
     strategy:
       matrix:
-        go: ["1.21"]
+        go: ["1.22"]
     steps:
       # Setup the workflow to use the specific version of Go
       - name: Set up Go 1.x
@@ -39,20 +39,14 @@ jobs:
       - name: Benchmark
         run: |
           go test -run=^$ -bench=. -benchmem ./...
-      # Sends code coverage report to Coveralls
-      - name: Coveralls
-        env:
-          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          GO111MODULE=off go get github.com/mattn/goveralls
-          $(go env GOPATH)/bin/goveralls -coverprofile=profile.cov -service=github
+
   # Run the linter as a separate job
   golangci:
     name: Lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ["1.21"]
+        go: ["1.22"]
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -62,6 +56,6 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.54
+          version: v1.59
           args: "--out-${NO_FUTURE}format colored-line-number --timeout=3m"
           github-token: "${{ secrets.GITHUB_TOKEN }}"

@@ -194,7 +194,8 @@ func StartOpaServer(
 			break
 		}
 
-		if checkRounds == 5 {
+		waitRounds := 5
+		if checkRounds == waitRounds {
 			t.Fatalf("opa didn't came up after %d seconds", checkRounds)
 		}
 

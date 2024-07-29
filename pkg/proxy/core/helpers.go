@@ -53,7 +53,7 @@ func RedirectToAuthorization(
 
 		// step: add a state referrer to the authorization page
 		uuid := cookManager.DropStateParameterCookie(req, wrt)
-		authQuery := fmt.Sprintf("?state=%s", uuid)
+		authQuery := "?state=" + uuid
 
 		if len(allowedQueryParams) > 0 {
 			query := ""

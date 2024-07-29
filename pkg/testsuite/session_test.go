@@ -16,12 +16,11 @@ limitations under the License.
 package testsuite
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
@@ -41,7 +40,7 @@ func TestGetIndentity(t *testing.T) {
 			Request: func(token string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
-						"Authorization": []string{fmt.Sprintf("Bearer %s", token)},
+						"Authorization": []string{"Bearer " + token},
 					},
 				}
 			},
@@ -51,7 +50,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
 						"Authorization": []string{"Basic QWxhZGRpbjpPcGVuU2VzYW1l"},
@@ -67,7 +66,7 @@ func TestGetIndentity(t *testing.T) {
 			Request: func(token string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
-						"Authorization": []string{fmt.Sprintf("Test %s", token)},
+						"Authorization": []string{"Test " + token},
 					},
 				}
 			},
@@ -77,7 +76,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{},
 				}
@@ -88,7 +87,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{},
 				}
@@ -102,7 +101,7 @@ func TestGetIndentity(t *testing.T) {
 			Request: func(token string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
-						"Authorization": []string{fmt.Sprintf("Bearer %s", token)},
+						"Authorization": []string{"Bearer " + token},
 					},
 				}
 			},
@@ -112,7 +111,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
 						"Authorization": []string{"Basic QWxhZGRpbjpPcGVuU2VzYW1l"},
@@ -128,7 +127,6 @@ func TestGetIndentity(t *testing.T) {
 
 	for idx, testCase := range testCases {
 		cfg := newFakeKeycloakConfig()
-		testCase := testCase
 		testCase.ProxySettings(cfg)
 
 		p, idp, _ := newTestProxyService(cfg)
@@ -260,7 +258,7 @@ func TestGetUserContext(t *testing.T) {
 	token.addClientRoles("client", []string{"client"})
 	jwtToken, err := token.GetToken()
 	require.NoError(t, err)
-	webToken, err := jwt.ParseSigned(jwtToken)
+	webToken, err := jwt.ParseSigned(jwtToken, constant.SignatureAlgs[:])
 	require.NoError(t, err)
 	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
@@ -277,7 +275,7 @@ func TestGetUserRealmRoleContext(t *testing.T) {
 	token.addRealmRoles(roles)
 	jwtToken, err := token.GetToken()
 	require.NoError(t, err)
-	webToken, err := jwt.ParseSigned(jwtToken)
+	webToken, err := jwt.ParseSigned(jwtToken, constant.SignatureAlgs[:])
 	require.NoError(t, err)
 	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
@@ -294,7 +292,7 @@ func TestUserContextString(t *testing.T) {
 	token := NewTestToken("test")
 	jwtToken, err := token.GetToken()
 	require.NoError(t, err)
-	webToken, err := jwt.ParseSigned(jwtToken)
+	webToken, err := jwt.ParseSigned(jwtToken, constant.SignatureAlgs[:])
 	require.NoError(t, err)
 	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)

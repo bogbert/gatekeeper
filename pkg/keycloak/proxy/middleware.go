@@ -105,7 +105,7 @@ func authorizationMiddleware(
 
 				authzPath := req.URL.Path
 				if noProxy {
-					authzPath = req.Header.Get("X-Forwarded-URI")
+					authzPath = req.Header.Get("X-Forwarded-Uri")
 					if authzPath == "" {
 						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 						accessForbidden(wrt, req)

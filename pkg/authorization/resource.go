@@ -61,7 +61,8 @@ func (r *Resource) Parse(resource string) (*Resource, error) {
 	for _, x := range strings.Split(resource, "|") {
 		keyPair := strings.Split(x, "=")
 
-		if len(keyPair) != 2 {
+		keyPairMembers := 2
+		if len(keyPair) != keyPairMembers {
 			return nil,
 				errors.New(
 					"invalid resource keypair, should be " +

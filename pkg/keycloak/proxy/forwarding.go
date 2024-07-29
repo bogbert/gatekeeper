@@ -16,7 +16,6 @@ limitations under the License.
 package proxy
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -34,7 +33,7 @@ func forwardProxyHandler(
 	enableHmac bool,
 	encryptionKey string,
 ) func(*http.Request, *http.Response) {
-	return func(req *http.Request, resp *http.Response) {
+	return func(req *http.Request, _ *http.Response) {
 		var token string
 
 		pat.m.RLock()
@@ -52,7 +51,7 @@ func forwardProxyHandler(
 		req.URL.Host = hostname
 		// is the host being signed?
 		if len(forwardingDomains) == 0 || utils.ContainsSubString(hostname, forwardingDomains) {
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("X-Forwarded-Agent", constant.Prog)
 		}
 		if enableHmac {

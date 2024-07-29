@@ -36,6 +36,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/urfave/cli/v2"
 )
@@ -209,7 +210,7 @@ func TryUpdateConnection(req *http.Request, writer http.ResponseWriter, endpoint
 	hijacker, assertOk := writer.(http.Hijacker)
 
 	if !assertOk {
-		return fmt.Errorf("writer does not implement http.Hijacker method")
+		return apperrors.ErrHijackerMethodMissing
 	}
 
 	// @step: get the client connection object
@@ -228,7 +229,8 @@ func TryUpdateConnection(req *http.Request, writer http.ResponseWriter, endpoint
 
 	// @step: copy the data between client and upstream endpoint
 	var wg sync.WaitGroup
-	wg.Add(2)
+	numConnectionWorkers := 2
+	wg.Add(numConnectionWorkers)
 	go func() { _, _ = TransferBytes(server, client, &wg) }()
 	go func() { _, _ = TransferBytes(client, server, &wg) }()
 	wg.Wait()
@@ -240,7 +242,8 @@ func TryUpdateConnection(req *http.Request, writer http.ResponseWriter, endpoint
 func DialAddress(location *url.URL) string {
 	items := strings.Split(location.Host, ":")
 
-	if len(items) != 2 {
+	locationItems := 2
+	if len(items) != locationItems {
 		switch location.Scheme {
 		case constant.UnsecureScheme:
 			return location.Host + ":80"

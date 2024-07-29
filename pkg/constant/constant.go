@@ -1,6 +1,10 @@
 package constant
 
-import "time"
+import (
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+)
 
 type contextKey int8
 
@@ -70,5 +74,32 @@ const (
 	IdpResourceSetURI = "/authz/protection/resource_set"
 	IdpProtectPermURI = "/authz/protection/permission"
 
-	InvalidCookieDuration = -10 * time.Hour
+	InvalidCookieDuration   = -10 * time.Hour
+	PKCECodeVerifierLength  = 96
+	PATRefreshInPercent     = 0.85
+	HTTPCompressionLevel    = 5
+	SelfSignedRSAKeyLength  = 2048
+	SelfSignedMaxSerialBits = 128
+	CookiesPerDomainSize    = 4069
+	RedisTimeout            = 10 * time.Second
+
+	FallbackAccessTokenDuration          = 720
+	DefaultMaxIdleConns                  = 100
+	DefaultMaxIdleConnsPerHost           = 50
+	DefaultOpenIDProviderTimeout         = 30 * time.Second
+	DefaultOpenIDProviderRetryCount      = 3
+	DefaultSelfSignedTLSExpiration       = 3 * time.Hour
+	DefaultServerIdleTimeout             = 120 * time.Second
+	DefaultServerReadTimeout             = 10 * time.Second
+	DefaultServerWriteTimeout            = 10 * time.Second
+	DefaultUpstreamExpectContinueTimeout = 10 * time.Second
+	DefaultUpstreamKeepaliveTimeout      = 10 * time.Second
+	DefaultUpstreamResponseHeaderTimeout = 10 * time.Second
+	DefaultUpstreamTLSHandshakeTimeout   = 10 * time.Second
+	DefaultUpstreamTimeout               = 10 * time.Second
+	DefaultPatRetryCount                 = 5
+	DefaultPatRetryInterval              = 10 * time.Second
+	DefaultOpaTimeout                    = 10 * time.Second
 )
+
+var SignatureAlgs = [3]jose.SignatureAlgorithm{jose.RS256, jose.HS256, jose.HS512}

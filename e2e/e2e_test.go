@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive //we want to use it for ginkgo
+	. "github.com/onsi/gomega"    //nolint:revive //we want to use it for gomega
 	"golang.org/x/oauth2/clientcredentials"
 
 	resty "github.com/go-resty/resty/v2"
@@ -69,7 +69,7 @@ func startAndWait(portNum string, osArgs []string) {
 		Expect(app.Run(osArgs)).To(Succeed())
 	}()
 
-	Eventually(func(g Gomega) error {
+	Eventually(func(_ Gomega) error {
 		conn, err := net.Dial("tcp", ":"+portNum)
 		if err != nil {
 			return err
@@ -91,7 +91,7 @@ func codeFlowLogin(client *resty.Client, reqAddress string, expStatusCode int) *
 	selection := doc.Find("#kc-form-login")
 	Expect(selection).ToNot(BeNil())
 
-	selection.Each(func(i int, s *goquery.Selection) {
+	selection.Each(func(_ int, s *goquery.Selection) {
 		action, exists := s.Attr("action")
 		Expect(exists).To(BeTrue())
 
@@ -202,7 +202,7 @@ var _ = Describe("Code Flow login/logout", func() {
 		It("should login with user/password and logout successfully",
 			Label("code_flow"),
 			Label("basic_case"),
-			func(ctx context.Context) {
+			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
@@ -266,7 +266,7 @@ var _ = Describe("Code Flow login/logout", func() {
 			Label("code_flow"),
 			Label("forged_access_token"),
 			Label("attack"),
-			func(ctx context.Context) {
+			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
@@ -339,7 +339,7 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 		It("should login with user/password and logout successfully",
 			Label("code_flow"),
 			Label("pkce"),
-			func(ctx context.Context) {
+			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
@@ -420,7 +420,7 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 	})
 
 	When("Login user with one browser client on two clients/app and logout on one of them", func() {
-		It("should logout on both successfully", func(ctx context.Context) {
+		It("should logout on both successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
 			resp := codeFlowLogin(rClient, proxyAddressFirst, http.StatusOK)

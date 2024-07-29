@@ -63,6 +63,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+
+	_ "go.uber.org/automaxprocs" // fixes golang cgroup issue
 	"go.uber.org/zap"
 )
 
@@ -239,11 +241,15 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	}
 
 	if r.Config.EnableCompression {
-		engine.Use(middleware.Compress(5))
+		engine.Use(middleware.Compress(constant.HTTPCompressionLevel))
 	}
 
 	// @step: enable the entrypoint middleware
 	engine.Use(gmiddleware.EntrypointMiddleware(r.Log))
+
+	if r.Config.NoProxy {
+		engine.Use(gmiddleware.ForwardAuthMiddleware(r.Log, r.Config.OAuthURI))
+	}
 
 	if r.Config.EnableLogging {
 		engine.Use(gmiddleware.LoggingMiddleware(r.Log, r.Config.Verbose))
@@ -314,7 +320,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	engine := chi.NewRouter()
 	r.useDefaultStack(engine)
 
-	r.WithOAuthURI = utils.WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
+	WithOAuthURI := utils.WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
 	r.Cm = &cookie.Manager{
 		CookieDomain:         r.Config.CookieDomain,
 		BaseURI:              r.Config.BaseURI,
@@ -356,7 +362,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.NoRedirects,
 		r.Config.SecureCookie,
 		r.Config.CookieOAuthStateName,
-		r.WithOAuthURI,
+		WithOAuthURI,
 	)
 
 	redToAuth := core.RedirectToAuthorization(
@@ -413,7 +419,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 	r.Log.Info(
 		"enabled health service",
-		zap.String("path", path.Clean(r.WithOAuthURI(constant.HealthURL))),
+		zap.String("path", path.Clean(WithOAuthURI(constant.HealthURL))),
 	)
 
 	adminEngine.Get(constant.HealthURL, handlers.HealthHandler)
@@ -421,7 +427,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	if r.Config.EnableMetrics {
 		r.Log.Info(
 			"enabled the service metrics middleware",
-			zap.String("path", path.Clean(r.WithOAuthURI(constant.MetricsURL))),
+			zap.String("path", path.Clean(WithOAuthURI(constant.MetricsURL))),
 		)
 		adminEngine.Get(
 			constant.MetricsURL,
@@ -552,7 +558,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			handlers.TokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
 		eng.Post(constant.LoginURL, loginHand)
-		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, r.WithOAuthURI))
+		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, WithOAuthURI))
 
 		if r.Config.ListenAdmin == "" {
 			eng.Mount("/", adminEngine)
@@ -810,7 +816,7 @@ func (r *OauthProxy) createForwardingProxy() error {
 
 		// implement the goproxy connect method
 		proxy.OnRequest().HandleConnectFunc(
-			func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+			func(host string, _ *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 				return &goproxy.ConnectAction{
 					Action:    goproxy.ConnectMitm,
 					TLSConfig: goproxy.TLSConfigFromCA(cAuthority),
@@ -1097,7 +1103,7 @@ func (r *OauthProxy) createHTTPListener(config listenerConfig) (net.Listener, er
 
 	// @check if the socket requires TLS
 	if config.useSelfSignedTLS || config.useLetsEncryptTLS || config.useFileTLS {
-		getCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		getCertificate := func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return nil, errors.New("not configured")
 		}
 
@@ -1222,7 +1228,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		)
 
 		socketPath := fmt.Sprintf("%s%s", upstream.Host, upstream.Path)
-		dialer = func(network, address string) (net.Conn, error) {
+		dialer = func(_, _ string) (net.Conn, error) {
 			return net.Dial("unix", socketPath)
 		}
 

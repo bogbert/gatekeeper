@@ -118,13 +118,13 @@ func newFakeProxy(cfg *config.Config, authConfig *fakeAuthConfig) *fakeProxy {
 		panic("failed to create the proxy service, error: " + err.Error())
 	}
 
-	cfg.RedirectionURL = fmt.Sprintf("http://%s", oProxy.Listener.Addr().String())
+	cfg.RedirectionURL = "http://" + oProxy.Listener.Addr().String()
 
 	return &fakeProxy{cfg, auth, oProxy, make(map[string]*http.Cookie)}
 }
 
 func (f *fakeProxy) getServiceURL() string {
-	return fmt.Sprintf("http://%s", f.proxy.Listener.Addr().String())
+	return "http://" + f.proxy.Listener.Addr().String()
 }
 
 // RunTests performs a series of requests against a fake proxy service
@@ -162,7 +162,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 
 		if reqCfg.ProxyProtocol != "" {
 			client.SetTransport(&http.Transport{
-				Dial: func(network, addr string) (net.Conn, error) {
+				Dial: func(_, addr string) (net.Conn, error) {
 					conn, err := net.Dial("tcp", addr)
 
 					if err != nil {
@@ -688,7 +688,7 @@ func newFakeKeycloakConfig() *config.Config {
 		TLSAdminPrivateKey:          "",
 		TLSAdminCaCertificate:       "",
 		OAuthURI:                    "/oauth",
-		OpenIDProviderTimeout:       time.Second * 5,
+		OpenIDProviderTimeout:       DefaultOpenIDProviderTimeout,
 		SkipOpenIDProviderTLSVerify: false,
 		SkipUpstreamTLSVerify:       false,
 		Scopes:                      []string{},
@@ -735,7 +735,8 @@ func makeTestCodeFlowLogin(location string, xforwarded bool) (*http.Response, []
 	}
 	// step: get the redirect
 	var resp *http.Response
-	for count := 0; count < 4; count++ {
+	numIter := 4
+	for range numIter {
 		req, err := http.NewRequest(http.MethodGet, location, nil)
 
 		for _, cookie := range flowCookies {

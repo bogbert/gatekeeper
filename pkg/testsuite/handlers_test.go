@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -122,7 +122,7 @@ func TestLoginHandler(t *testing.T) {
 	}{
 		{
 			Name:          "TestFailLoginWithoutCredentials",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:          uri,
@@ -133,7 +133,7 @@ func TestLoginHandler(t *testing.T) {
 		},
 		{
 			Name:          "TestFailLoginWithoutPassword",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:          uri,
@@ -145,7 +145,7 @@ func TestLoginHandler(t *testing.T) {
 		},
 		{
 			Name:          "TestFailLoginWithoutUsername",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:          uri,
@@ -157,7 +157,7 @@ func TestLoginHandler(t *testing.T) {
 		},
 		{
 			Name:          "TestLoginWithGoodCredentials",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:    uri,
@@ -166,7 +166,7 @@ func TestLoginHandler(t *testing.T) {
 						"password": "test",
 						"username": "test",
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestLoginHandler(t *testing.T) {
 		},
 		{
 			Name:          "TestFailLoginWithBadPassword",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:    uri,
@@ -211,7 +211,6 @@ func TestLoginHandler(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -326,7 +325,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 						cfg.CookieAccessName:  checkAccessTokenEncryption,
 						cfg.CookieIDTokenName: checkAccessTokenEncryption,
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -361,7 +360,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 						cfg.CookieAccessName:  checkAccessTokenEncryption,
 						cfg.CookieRefreshName: checkRefreshTokenEncryption,
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -394,7 +393,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: checkAccessTokenEncryption,
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -429,7 +428,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 						cfg.CookieAccessName:  checkAccessTokenEncryption,
 						cfg.CookieRefreshName: checkRefreshTokenEncryption,
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -460,8 +459,8 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					},
 					ExpectedCookies: map[string]string{cfg.CookieAccessName: ""},
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						cfg.CookieAccessName: func(t *testing.T, config *config.Config, rawToken string) bool {
-							token, err := jwt.ParseSigned(rawToken)
+						cfg.CookieAccessName: func(t *testing.T, _ *config.Config, rawToken string) bool {
+							token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 							if err != nil {
 								return false
 							}
@@ -475,7 +474,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 							return assert.Contains(t, user.Claims, "aud") && assert.Contains(t, user.Claims, "email")
 						},
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -511,8 +510,8 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 						cfg.CookieIDTokenName: "",
 					},
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						cfg.CookieAccessName: func(t *testing.T, config *config.Config, rawToken string) bool {
-							token, err := jwt.ParseSigned(rawToken)
+						cfg.CookieAccessName: func(t *testing.T, _ *config.Config, rawToken string) bool {
+							token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 							if err != nil {
 								return false
 							}
@@ -527,7 +526,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 						},
 						cfg.CookieRefreshName: checkRefreshTokenEncryption,
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						resp := models.TokenResponse{}
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
@@ -542,7 +541,6 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -592,7 +590,6 @@ func TestLogoutHandlerBadRequest(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -641,7 +638,7 @@ func TestLogoutHandlerGood(t *testing.T) {
 	}{
 		{
 			Name:          "TestLogoutWithoutRedirect",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:          logoutURL,
@@ -652,7 +649,7 @@ func TestLogoutHandlerGood(t *testing.T) {
 		},
 		{
 			Name:          "TestLogoutWithRedirectQueryParam",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:              utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL) + "?redirect=http://example.com",
@@ -692,7 +689,6 @@ func TestLogoutHandlerGood(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfgCopy := *cfg
 		cfg := &cfgCopy
 		t.Run(
@@ -796,7 +792,7 @@ func TestTokenHandler(t *testing.T) {
 			HasToken:     true,
 			RawToken:     goodToken,
 			ExpectedCode: http.StatusOK,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.NotEqual(t, body, goodToken)
 				jsonMap := make(map[string]interface{})
 				err := json.Unmarshal([]byte(body), &jsonMap)
@@ -820,7 +816,7 @@ func TestTokenHandler(t *testing.T) {
 			HasToken:       true,
 			HasCookieToken: true,
 			ExpectedCode:   http.StatusOK,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.NotEqual(t, body, goodToken)
 				jsonMap := make(map[string]interface{})
 				err := json.Unmarshal([]byte(body), &jsonMap)
@@ -869,7 +865,6 @@ func TestServiceRedirect(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -974,7 +969,7 @@ func TestAuthorizationURL(t *testing.T) {
 					Redirects:        true,
 					ExpectedLocation: "test=yes",
 					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"Location": func(t *testing.T, c *config.Config, value string) {
+						"Location": func(t *testing.T, _ *config.Config, value string) {
 							assert.NotContains(t, value, "test1=test")
 						},
 					},
@@ -1012,7 +1007,7 @@ func TestAuthorizationURL(t *testing.T) {
 					URI:       "/admin?test1=test&test=yes",
 					Redirects: true,
 					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"Location": func(t *testing.T, c *config.Config, value string) {
+						"Location": func(t *testing.T, _ *config.Config, value string) {
 							assert.Contains(t, value, "test1=test")
 							assert.Contains(t, value, "test=yes")
 						},
@@ -1038,7 +1033,7 @@ func TestAuthorizationURL(t *testing.T) {
 					URI:       "/admin?test1=test",
 					Redirects: true,
 					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"Location": func(t *testing.T, c *config.Config, value string) {
+						"Location": func(t *testing.T, _ *config.Config, value string) {
 							assert.Contains(t, value, "test1=test")
 							assert.Contains(t, value, "test=yes")
 						},
@@ -1064,7 +1059,7 @@ func TestAuthorizationURL(t *testing.T) {
 					URI:       "/admin?test1=test",
 					Redirects: true,
 					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"Location": func(t *testing.T, c *config.Config, value string) {
+						"Location": func(t *testing.T, _ *config.Config, value string) {
 							assert.Contains(t, value, "test1=test")
 							assert.Contains(t, value, "test=yes")
 						},
@@ -1076,7 +1071,6 @@ func TestAuthorizationURL(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -1155,7 +1149,7 @@ func TestDiscoveryURL(t *testing.T) {
 	}{
 		{
 			Name:          "TestDiscoveryOK",
-			ProxySettings: func(c *config.Config) {},
+			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:                     "/oauth/discovery",
@@ -1210,7 +1204,6 @@ func TestDiscoveryURL(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {

@@ -42,10 +42,10 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 	app.Usage = constant.Description
 	app.Version = proxycore.GetVersion()
 	app.Flags = getCommandLineOptions(cfg)
-	app.UsageText = fmt.Sprintf("%s [options]", constant.Prog)
+	app.UsageText = constant.Prog + " [options]"
 
 	// step: the standard usage message isn't that helpful
-	app.OnUsageError = func(context *cli.Context, err error, isSubcommand bool) error {
+	app.OnUsageError = func(_ *cli.Context, err error, _ bool) error {
 		fmt.Fprintf(os.Stderr, "[error] invalid options, %s\n", err)
 		return err
 	}
@@ -105,7 +105,7 @@ func getCommandLineOptions(cfg core.Configs) []cli.Flag {
 	var flags []cli.Flag
 	count := reflect.TypeOf(cfg).Elem().NumField()
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		field := reflect.TypeOf(cfg).Elem().Field(i)
 		usage, found := field.Tag.Lookup("usage")
 
@@ -187,7 +187,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 	// step: iterate the Config and grab command line options via reflection
 	count := reflect.TypeOf(config).Elem().NumField()
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		field := reflect.TypeOf(config).Elem().Field(i)
 		name := field.Tag.Get("yaml")
 

@@ -24,13 +24,14 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"fmt"
 	"math/big"
 	"net"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
+	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"go.uber.org/zap"
 )
 
@@ -53,11 +54,11 @@ type SelfSignedCertificate struct {
 // newSelfSignedCertificate creates and returns a self signed certificate manager
 func NewSelfSignedCertificate(hostnames []string, expiry time.Duration, log *zap.Logger) (*SelfSignedCertificate, error) {
 	if len(hostnames) == 0 {
-		return nil, fmt.Errorf("no hostnames specified")
+		return nil, apperrors.ErrCertSelfNoHostname
 	}
 
 	if expiry < 5*time.Minute {
-		return nil, fmt.Errorf("expiration must be greater then 5 minutes")
+		return nil, apperrors.ErrCertSelfLowExpiration
 	}
 
 	// @step: generate a certificate pair
@@ -66,7 +67,7 @@ func NewSelfSignedCertificate(hostnames []string, expiry time.Duration, log *zap
 		zap.String("common_name", hostnames[0]),
 	)
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	key, err := rsa.GenerateKey(rand.Reader, constant.SelfSignedRSAKeyLength)
 
 	if err != nil {
 		return nil, err
@@ -155,7 +156,7 @@ func (c *SelfSignedCertificate) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Cer
 // createCertificate is responsible for creating a certificate
 func CreateCertificate(key *rsa.PrivateKey, hostnames []string, expire time.Duration) (tls.Certificate, error) {
 	// @step: create a serial for the certificate
-	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), constant.SelfSignedMaxSerialBits))
 	if err != nil {
 		return tls.Certificate{}, err
 	}

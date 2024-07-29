@@ -11,13 +11,13 @@ import (
 // the default practice of a encrypted cookie
 type Storage interface {
 	// Set the token to the store
-	Set(context.Context, string, string, time.Duration) error
+	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	// Get retrieves a token from the store
-	Get(context.Context, string) (string, error)
+	Get(ctx context.Context, key string) (string, error)
 	// Exists checks if key exists in store
-	Exists(context.Context, string) (bool, error)
+	Exists(ctx context.Context, key string) (bool, error)
 	// Delete removes a key from the store
-	Delete(context.Context, string) error
+	Delete(ctx context.Context, key string) error
 	// Close is used to close off any resources
 	Close() error
 	GetRefreshTokenFromStore(ctx context.Context, token string) (string, error)

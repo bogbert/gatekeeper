@@ -319,7 +319,7 @@ func TestCustomCookieNames(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customStateName: func(t *testing.T, c *config.Config, value string) bool {
+						customStateName: func(t *testing.T, _ *config.Config, value string) bool {
 							return assert.NotEqual(t, "", value)
 						},
 					},
@@ -342,7 +342,7 @@ func TestCustomCookieNames(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customAccessName: func(t *testing.T, c *config.Config, value string) bool {
+						customAccessName: func(t *testing.T, _ *config.Config, value string) bool {
 							return assert.NotEqual(t, "", value)
 						},
 					},
@@ -367,7 +367,7 @@ func TestCustomCookieNames(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customRefreshName: func(t *testing.T, c *config.Config, value string) bool {
+						customRefreshName: func(t *testing.T, _ *config.Config, value string) bool {
 							return assert.NotEqual(t, "", value)
 						},
 					},
@@ -391,7 +391,7 @@ func TestCustomCookieNames(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customRedirectName: func(t *testing.T, c *config.Config, value string) bool {
+						customRedirectName: func(t *testing.T, _ *config.Config, value string) bool {
 							return assert.NotEqual(t, "", value)
 						},
 					},
@@ -417,7 +417,7 @@ func TestCustomCookieNames(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customPKCEName: func(t *testing.T, c *config.Config, value string) bool {
+						customPKCEName: func(t *testing.T, _ *config.Config, value string) bool {
 							return assert.NotEqual(t, "", value)
 						},
 					},
@@ -444,7 +444,7 @@ func TestCustomCookieNames(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customIDTokenName: func(t *testing.T, c *config.Config, value string) bool {
+						customIDTokenName: func(t *testing.T, _ *config.Config, value string) bool {
 							return assert.NotEqual(t, "", value)
 						},
 					},
@@ -454,7 +454,6 @@ func TestCustomCookieNames(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
