@@ -73,6 +73,7 @@ func AuthenticationMiddleware(
 			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
 			lLog := scope.Logger.With(
 				zap.String("remote_addr", req.RemoteAddr),
+				zap.String("username", user.Name),
 				zap.String("sub", user.ID),
 				zap.String("expired_on", user.ExpiresAt.String()),
 			)

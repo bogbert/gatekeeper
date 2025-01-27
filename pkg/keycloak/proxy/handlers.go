@@ -812,6 +812,7 @@ func logoutHandler(
 			case http.StatusOK:
 				scope.Logger.Info(
 					"successfully logged out of the endpoint",
+				        zap.String("username", user.Name),
 					zap.String("userID", user.ID),
 				)
 			default:
