@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Nerzal/gocloak/v12"
+	"github.com/Nerzal/gocloak/v13"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -91,7 +91,7 @@ func oauthAuthorizationHandler(
 		}
 
 		if enablePKCE {
-			codeVerifier, err := pkce.NewCodeVerifierWithLength(constant.PKCECodeVerifierLength)
+			codeVerifier, err := pkce.NewCodeVerifier(constant.PKCECodeVerifierLength)
 			if err != nil {
 				logger.Error(
 					apperrors.ErrPKCECodeCreation.Error(),
@@ -415,6 +415,7 @@ func loginHandler(
 		defer cancel()
 
 		code, err := func(context.Context) (int, error) {
+			//nolint:fatcontext
 			ctx = context.WithValue(
 				ctx,
 				oauth2.HTTPClient,
@@ -465,7 +466,7 @@ func loginHandler(
 					errors.Join(apperrors.ErrExtractIdentityFromAccessToken, err)
 			}
 
-			writer.Header().Set("Content-Type", "application/json")
+			writer.Header().Set(constant.HeaderContentType, "application/json")
 			idToken, assertOk := token.Extra("id_token").(string)
 			if !assertOk {
 				return http.StatusInternalServerError,
@@ -647,7 +648,7 @@ func logoutHandler(
 	cookManager *cookie.Manager,
 	httpClient *http.Client,
 	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	GetIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		// @check if the redirection is there
@@ -680,7 +681,7 @@ func logoutHandler(
 		}
 
 		// @step: drop the access token
-		user, err := GetIdentity(req, cookieAccessName, "")
+		user, err := getIdentity(req, cookieAccessName, "")
 		if err != nil {
 			accessError(writer, req)
 			return
@@ -791,7 +792,7 @@ func logoutHandler(
 
 			// step: add the authentication headers and content-type
 			request.SetBasicAuth(encodedID, encodedSecret)
-			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			request.Header.Set(constant.HeaderContentType, "application/x-www-form-urlencoded")
 
 			start := time.Now()
 			response, err := httpClient.Do(request)

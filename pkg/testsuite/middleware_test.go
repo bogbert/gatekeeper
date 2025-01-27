@@ -80,7 +80,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		{
 			URI: uri,
 			Headers: map[string]string{
-				"X-Forwarded-For": "10.0.0.1",
+				constant.HeaderXForwardedFor: "10.0.0.1",
 			},
 			ExpectedCode: http.StatusForbidden,
 		},
@@ -195,8 +195,11 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12301"
 				conf.ListenAdminScheme = constant.SecureScheme
+				//nolint:gosec
 				conf.TLSAdminCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSAdminPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSAdminCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
@@ -221,8 +224,11 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12302"
 				conf.ListenAdminScheme = constant.SecureScheme
+				//nolint:gosec
 				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
@@ -280,7 +286,7 @@ func TestAdminListener(t *testing.T) {
 
 				if certFile != "" {
 					fakeCertByte := []byte(fakeCert)
-					err := os.WriteFile(certFile, fakeCertByte, 0644)
+					err := os.WriteFile(certFile, fakeCertByte, 0600)
 
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
@@ -290,7 +296,7 @@ func TestAdminListener(t *testing.T) {
 
 				if privFile != "" {
 					fakeKeyByte := []byte(fakePrivateKey)
-					err := os.WriteFile(privFile, fakeKeyByte, 0644)
+					err := os.WriteFile(privFile, fakeKeyByte, 0600)
 
 					if err != nil {
 						t.Fatalf("Problem writing privateKey %s", err)
@@ -300,7 +306,7 @@ func TestAdminListener(t *testing.T) {
 
 				if caFile != "" {
 					fakeCAByte := []byte(fakeCA)
-					err := os.WriteFile(caFile, fakeCAByte, 0644)
+					err := os.WriteFile(caFile, fakeCAByte, 0600)
 
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
@@ -1637,6 +1643,7 @@ func delay(no int, _ *resty.Request, _ *resty.Response) {
 }
 
 func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) bool {
+	t.Helper()
 	rawToken, err := encryption.DecodeText(value, cfg.EncryptionKey)
 
 	if err != nil {
@@ -1990,7 +1997,7 @@ func TestAdmissionHandlerRoles(t *testing.T) {
 	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, requests)
 }
 
-// check to see if custom headers are hitting the upstream
+// check to see if custom headers are hitting the upstream.
 func TestCustomHeaders(t *testing.T) {
 	requests := []struct {
 		Headers map[string]string
@@ -2338,6 +2345,37 @@ func TestEnableUma(t *testing.T) {
 			AuthServerSettings: &fakeAuthConfig{},
 		},
 		{
+			Name: "TestUmaDisabledWhenPerResourceNoRedirect",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableUma = true
+				conf.EnableDefaultDeny = true
+				conf.ClientID = ValidUsername
+				conf.ClientSecret = ValidPassword
+				conf.PatRetryCount = 5
+				conf.PatRetryInterval = 2 * time.Second
+				conf.Resources = []*authorization.Resource{
+					{
+						URL:        FakeTestURL,
+						Methods:    utils.AllHTTPMethods,
+						NoRedirect: true,
+					},
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeTestURL,
+					ExpectedProxy: false,
+					ExpectedCode:  http.StatusUnauthorized,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "")
+					},
+				},
+			},
+			AuthServerSettings: &fakeAuthConfig{
+				ResourceSetHandlerFailure: true,
+			},
+		},
+		{
 			Name: "TestUmaTokenWithoutAuthzWithNoResourcesInAuthServer",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableUma = true
@@ -2487,19 +2525,19 @@ func TestLogRealIP(t *testing.T) {
 			ExpectedIP: "127.0.0.1",
 		},
 		{
-			Headers:    map[string]string{"X-Forwarded-For": "192.168.1.1"},
+			Headers:    map[string]string{constant.HeaderXForwardedFor: "192.168.1.1"},
 			ExpectedIP: "192.168.1.1",
 		},
 		{
-			Headers:    map[string]string{"X-Forwarded-For": "192.168.1.1, 192.168.1.2"},
+			Headers:    map[string]string{constant.HeaderXForwardedFor: "192.168.1.1, 192.168.1.2"},
 			ExpectedIP: "192.168.1.1",
 		},
 		{
-			Headers:    map[string]string{"X-Real-Ip": "10.0.0.1"},
+			Headers:    map[string]string{constant.HeaderXRealIP: "10.0.0.1"},
 			ExpectedIP: "10.0.0.1",
 		},
 		{
-			Headers:    map[string]string{"X-Forwarded-For": "192.168.1.1", "X-Real-Ip": "10.0.0.1"},
+			Headers:    map[string]string{constant.HeaderXForwardedFor: "192.168.1.1", constant.HeaderXRealIP: "10.0.0.1"},
 			ExpectedIP: "192.168.1.1",
 		},
 	}
@@ -2527,7 +2565,7 @@ func TestLogRealIP(t *testing.T) {
 		_ = cfg.Update()
 
 		proxy, _ := proxy.NewProxy(cfg, testLog, &FakeUpstreamService{})
-		_ = proxy.Run()
+		_, _ = proxy.Run()
 
 		cfg.RedirectionURL = "http://" + proxy.Listener.Addr().String()
 		fp := &fakeProxy{cfg, auth, proxy, make(map[string]*http.Cookie)}
@@ -2829,7 +2867,7 @@ func TestAuthenticationMiddleware(t *testing.T) {
 	tok.SetExpiration(time.Now().Add(-5 * time.Minute))
 	unsignedToken, err := tok.GetUnsignedToken()
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 
 	badlySignedToken := unsignedToken + FakeSignature

@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// SecurityMiddleware performs numerous security checks on the request
+// SecurityMiddleware performs numerous security checks on the request.
 func SecurityMiddleware(
 	logger *zap.Logger,
 	allowedHosts []string,
@@ -37,7 +37,7 @@ func SecurityMiddleware(
 			ContentSecurityPolicy: contentSecurityPolicy,
 			ContentTypeNosniff:    contentTypeNosniff,
 			FrameDeny:             frameDeny,
-			SSLProxyHeaders:       map[string]string{"X-Forwarded-Proto": "https"},
+			SSLProxyHeaders:       map[string]string{constant.HeaderXForwardedProto: "https"},
 			SSLRedirect:           sslRedirect,
 		})
 
@@ -59,7 +59,7 @@ func SecurityMiddleware(
 	}
 }
 
-// HmacMiddleware verifies hmac
+// HmacMiddleware verifies hmac.
 func HmacMiddleware(logger *zap.Logger, encKey string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
@@ -141,7 +141,6 @@ func AdmissionMiddleware(
 
 			if len(resource.Headers) > 0 {
 				var reqHeaders []string
-
 				for _, resVal := range resource.Headers {
 					resVals := strings.Split(resVal, ":")
 					name := resVals[0]

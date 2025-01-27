@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"golang.org/x/net/websocket"
 )
 
-// fakeUpstreamResponse is the response from fake upstream
+// fakeUpstreamResponse is the response from fake upstream.
 type fakeUpstreamResponse struct {
 	URI     string      `json:"uri"`
 	Method  string      `json:"method"`
@@ -18,11 +21,11 @@ type fakeUpstreamResponse struct {
 	Body    string      `json:"body"`
 }
 
-// FakeUpstreamService acts as a fake upstream service, returns the headers and request
+// FakeUpstreamService acts as a fake upstream service, returns the headers and request.
 type FakeUpstreamService struct{}
 
 func (f *FakeUpstreamService) ServeHTTP(wrt http.ResponseWriter, req *http.Request) {
-	upgrade := strings.ToLower(req.Header.Get("Upgrade"))
+	upgrade := strings.ToLower(req.Header.Get(constant.HeaderUpgrade))
 	if upgrade == "websocket" {
 		wrt.Header().Set(TestProxyAccepted, "true")
 		websocket.Handler(func(wsock *websocket.Conn) {
@@ -47,8 +50,23 @@ func (f *FakeUpstreamService) ServeHTTP(wrt http.ResponseWriter, req *http.Reque
 			wrt.WriteHeader(http.StatusInternalServerError)
 		}
 
+		var delay int
+		rawDelay := req.Header.Get("Delay")
+		if rawDelay != "" {
+			delay, err = strconv.Atoi(rawDelay)
+			if err != nil {
+				wrt.WriteHeader(http.StatusInternalServerError)
+			}
+		}
+
+		if delay > 0 {
+			// Sleep for the specified duration
+			// This is to simulate a slow upstream service
+			<-time.After(time.Duration(delay) * time.Second)
+		}
+
 		wrt.Header().Set(TestProxyAccepted, "true")
-		wrt.Header().Set("Content-Type", "application/json")
+		wrt.Header().Set(constant.HeaderContentType, "application/json")
 		content, err := json.Marshal(&fakeUpstreamResponse{
 			// r.RequestURI is what was received by the proxy.
 			// r.URL.String() is what is actually sent to the upstream service.

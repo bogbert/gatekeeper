@@ -42,7 +42,7 @@ const (
 	IDTokenCookie      = "id_token"
 	UMACookie          = "uma_token"
 	// case is like this because go net package canonicalizes it
-	// to this form, see net package
+	// to this form, see net package.
 	UMAHeader      = "X-Uma-Token"
 	UnsecureScheme = "http"
 	SecureScheme   = "https"
@@ -51,19 +51,25 @@ const (
 
 	_ contextKey = iota
 	ContextScopeName
-	HeaderXForwardedFor = "X-Forwarded-For"
-	HeaderXRealIP       = "X-Real-IP"
-	HeaderXHMAC         = "X-HMAC-SHA256"
+	HeaderXForwardedFor    = "X-Forwarded-For"
+	HeaderXForwardedHost   = "X-Forwarded-Host"
+	HeaderXRealIP          = "X-Real-IP"
+	HeaderXForwardedProto  = "X-Forwarded-Proto"
+	HeaderXForwardedURI    = "X-Forwarded-URI"
+	HeaderXForwardedMethod = "X-Forwarded-Method"
+	HeaderXHMAC            = "X-HMAC-SHA256"
+	HeaderContentType      = "Content-Type"
 
 	DurationType = "time.Duration"
 
-	// SameSite cookie config options
+	// SameSite cookie config options.
 	SameSiteStrict = "Strict"
 	SameSiteLax    = "Lax"
 	SameSiteNone   = "None"
 
 	AllPath = "/*"
 
+	//nolint:gosec
 	IdpWellKnownURI   = "/.well-known/openid-configuration"
 	IdpCertsURI       = "/protocol/openid-connect/certs"
 	IdpTokenURI       = "/protocol/openid-connect/token"
@@ -78,7 +84,6 @@ const (
 	PKCECodeVerifierLength  = 96
 	PATRefreshInPercent     = 0.85
 	HTTPCompressionLevel    = 5
-	SelfSignedRSAKeyLength  = 2048
 	SelfSignedMaxSerialBits = 128
 	CookiesPerDomainSize    = 4069
 	RedisTimeout            = 10 * time.Second
@@ -89,6 +94,7 @@ const (
 	DefaultOpenIDProviderTimeout         = 30 * time.Second
 	DefaultOpenIDProviderRetryCount      = 3
 	DefaultSelfSignedTLSExpiration       = 3 * time.Hour
+	DefaultServerGraceTimeout            = 10 * time.Second
 	DefaultServerIdleTimeout             = 120 * time.Second
 	DefaultServerReadTimeout             = 10 * time.Second
 	DefaultServerWriteTimeout            = 10 * time.Second
@@ -100,6 +106,11 @@ const (
 	DefaultPatRetryCount                 = 5
 	DefaultPatRetryInterval              = 10 * time.Second
 	DefaultOpaTimeout                    = 10 * time.Second
+
+	ForwardingGrantTypePassword = "password"
+
+	TLS13 = "tlsv1.3"
+	TLS12 = "tlsv1.2"
 )
 
 var SignatureAlgs = [3]jose.SignatureAlgorithm{jose.RS256, jose.HS256, jose.HS512}

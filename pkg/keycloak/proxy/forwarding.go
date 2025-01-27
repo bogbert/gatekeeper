@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// forwardProxyHandler is responsible for signing outbound requests
+// forwardProxyHandler is responsible for signing outbound requests.
 func forwardProxyHandler(
 	logger *zap.Logger,
 	pat *PAT,
@@ -51,7 +51,7 @@ func forwardProxyHandler(
 		req.URL.Host = hostname
 		// is the host being signed?
 		if len(forwardingDomains) == 0 || utils.ContainsSubString(hostname, forwardingDomains) {
-			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set(constant.AuthorizationHeader, "Bearer "+token)
 			req.Header.Set("X-Forwarded-Agent", constant.Prog)
 		}
 		if enableHmac {

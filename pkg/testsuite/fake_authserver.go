@@ -2,7 +2,6 @@ package testsuite
 
 import (
 	"crypto/rand"
-	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
@@ -104,7 +103,6 @@ func NewTestToken(issuer string) *FakeToken {
 	return &FakeToken{Claims: claims}
 }
 
-// getToken returns a JWT token from the clains
 func (t *FakeToken) GetToken() (string, error) {
 	input := []byte("")
 	block, _ := pem.Decode([]byte(fakePrivateKey))
@@ -134,7 +132,6 @@ func (t *FakeToken) GetToken() (string, error) {
 	return jwt, nil
 }
 
-// getUnsignedToken returns a unsigned JWT token from the claims
 func (t *FakeToken) GetUnsignedToken() (string, error) {
 	input := []byte("")
 	block, _ := pem.Decode([]byte(fakePrivateKey))
@@ -170,22 +167,18 @@ func (t *FakeToken) GetUnsignedToken() (string, error) {
 	return jwt, nil
 }
 
-// setExpiration sets the expiration of the token
 func (t *FakeToken) SetExpiration(tm time.Time) {
 	t.Claims.Exp = tm.Unix()
 }
 
-// addGroups adds groups to then token
 func (t *FakeToken) addGroups(groups []string) {
 	t.Claims.Groups = groups
 }
 
-// addRealmRoles adds realms roles to token
 func (t *FakeToken) addRealmRoles(roles []string) {
 	t.Claims.RealmAccess.Roles = roles
 }
 
-// addClientRoles adds client roles to the token
 func (t *FakeToken) addClientRoles(client string, roles []string) {
 	t.Claims.ResourceAccess = make(map[string]RoleClaim)
 	t.Claims.ResourceAccess[client] = RoleClaim{Roles: roles}
@@ -293,15 +286,15 @@ type fakeOidcDiscoveryResponse struct {
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 type fakeAuthConfig struct {
+	DiscoveryURLPrefix        string
+	Expiration                time.Duration
 	EnablePKCE                bool
 	EnableTLS                 bool
 	EnableProxy               bool
-	Expiration                time.Duration
 	ResourceSetHandlerFailure bool
-	DiscoveryURLPrefix        string
 }
 
-// newFakeAuthServer simulates a oauth service
+// newFakeAuthServer simulates a oauth service.
 func newFakeAuthServer(config *fakeAuthConfig) *fakeAuthServer {
 	certBlock, _ := pem.Decode([]byte(fakeCert))
 
@@ -312,7 +305,6 @@ func newFakeAuthServer(config *fakeAuthConfig) *fakeAuthServer {
 		panic("failed to parse certificate from block, error: " + err.Error())
 	}
 
-	x5tSHA1 := sha1.Sum(cert.Raw)
 	x5tSHA256 := sha256.Sum256(cert.Raw)
 
 	service := &fakeAuthServer{
@@ -322,7 +314,6 @@ func newFakeAuthServer(config *fakeAuthConfig) *fakeAuthServer {
 			KeyID:                       "test-kid",
 			Algorithm:                   "RS256",
 			Certificates:                []*x509.Certificate{cert},
-			CertificateThumbprintSHA1:   x5tSHA1[:],
 			CertificateThumbprintSHA256: x5tSHA256[:],
 		},
 	}
@@ -478,7 +469,7 @@ func (r *fakeAuthServer) revocationHandler(wrt http.ResponseWriter, req *http.Re
 }
 
 func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Request) {
-	items := strings.Split(req.Header.Get("Authorization"), " ")
+	items := strings.Split(req.Header.Get(constant.AuthorizationHeader), " ")
 	authItems := 2
 	if len(items) != authItems {
 		wrt.WriteHeader(http.StatusUnauthorized)
@@ -768,7 +759,7 @@ func getRandomString(n int) (string, error) {
 }
 
 func renderJSON(code int, w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(constant.HeaderContentType, "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

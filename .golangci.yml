@@ -1,6 +1,4 @@
 linters-settings:
-  govet:
-    check-shadowing: true
   revive:
     min-confidence: 0
   gocyclo:
@@ -21,24 +19,19 @@ linters:
   enable-all: true
   disable:
     - depguard
-    - thelper
     - ireturn
     - maintidx
     - wrapcheck
-    - gosec
-    - gocritic
-    - errorlint
     - gci
     - gofumpt
     - nlreturn
     - noctx
     - paralleltest
     - exhaustive
-    - exhaustivestruct
     - exhaustruct
     - tagliatelle
-    - maligned
     - unparam
+    - err113
     - lll
     - gochecknoinits
     - gochecknoglobals
@@ -49,6 +42,4 @@ linters:
     # TODO: Revisit after the refactor
     - gocognit
     - testpackage
-    - goerr113
-    - godot
     - nestif

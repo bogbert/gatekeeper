@@ -30,49 +30,49 @@ import (
 )
 
 type fakeRequest struct {
-	BasicAuth                     bool
 	Cookies                       []*http.Cookie
-	Expires                       time.Duration
-	FormValues                    map[string]string
 	Groups                        []string
-	HasCookieToken                bool
-	HasLogin                      bool
-	LoginXforwarded               bool
-	HasToken                      bool
-	Headers                       map[string]string
+	Roles                         []string
+	ExpectedNoProxyHeaders        []string
 	Method                        string
-	NotSigned                     bool
-	OnResponse                    func(int, *resty.Request, *resty.Response)
 	Password                      string
 	ProxyProtocol                 string
-	ProxyRequest                  bool
 	RawToken                      string
-	Redirects                     bool
-	Roles                         []string
-	SkipClientIDCheck             bool
-	SkipIssuerCheck               bool
 	RequestCA                     string
-	TokenClaims                   map[string]interface{}
-	TokenAuthorization            *models.Permissions
 	URI                           string
 	URL                           string
 	Username                      string
-	TLSMin                        uint16
-	TLSMax                        uint16
-	ExpectedCode                  int
-	ExpectedContent               func(body string, testNum int)
 	ExpectedContentContains       string
 	ExpectedRequestError          string
+	ExpectedLocation              string
+	Expires                       time.Duration
+	FormValues                    map[string]string
+	Headers                       map[string]string
+	OnResponse                    func(int, *resty.Request, *resty.Response)
+	TokenClaims                   map[string]interface{}
+	TokenAuthorization            *models.Permissions
+	ExpectedCode                  int
+	ExpectedContent               func(body string, testNum int)
 	ExpectedCookies               map[string]string
 	ExpectedHeaders               map[string]string
 	ExpectedHeadersValidator      map[string]func(*testing.T, *config.Config, string)
-	ExpectedLocation              string
-	ExpectedNoProxyHeaders        []string
-	ExpectedProxy                 bool
 	ExpectedProxyHeaders          map[string]string
 	ExpectedProxyHeadersValidator map[string]func(*testing.T, *config.Config, string)
 	ExpectedCookiesValidator      map[string]func(*testing.T, *config.Config, string) bool
 	ExpectedLoginCookiesValidator map[string]func(*testing.T, *config.Config, string) bool
+	TLSMin                        uint16
+	TLSMax                        uint16
+	BasicAuth                     bool
+	HasCookieToken                bool
+	HasLogin                      bool
+	LoginXforwarded               bool
+	HasToken                      bool
+	NotSigned                     bool
+	ProxyRequest                  bool
+	Redirects                     bool
+	SkipClientIDCheck             bool
+	SkipIssuerCheck               bool
+	ExpectedProxy                 bool
 }
 
 type fakeProxy struct {
@@ -80,6 +80,10 @@ type fakeProxy struct {
 	idp     *fakeAuthServer
 	proxy   *proxy.OauthProxy
 	cookies map[string]*http.Cookie
+}
+
+func (f *fakeProxy) Shutdown() error {
+	return f.proxy.Shutdown()
 }
 
 func newFakeProxy(cfg *config.Config, authConfig *fakeAuthConfig) *fakeProxy {
@@ -114,7 +118,7 @@ func newFakeProxy(cfg *config.Config, authConfig *fakeAuthConfig) *fakeProxy {
 	}
 
 	// proxy.log = zap.NewNop()
-	if err = oProxy.Run(); err != nil {
+	if _, err = oProxy.Run(); err != nil {
 		panic("failed to create the proxy service, error: " + err.Error())
 	}
 
@@ -131,6 +135,7 @@ func (f *fakeProxy) getServiceURL() string {
 //
 //nolint:gocyclo,funlen,cyclop
 func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
+	t.Helper()
 	defer func() {
 		f.idp.Close()
 		f.proxy.Server.Close()
@@ -151,10 +156,12 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 		client := resty.New()
 
 		if reqCfg.TLSMin != 0 {
+			//nolint:gosec
 			client.SetTLSClientConfig(&tls.Config{MinVersion: reqCfg.TLSMin})
 		}
 
 		if reqCfg.TLSMax != 0 {
+			//nolint:gosec
 			client.SetTLSClientConfig(&tls.Config{MaxVersion: reqCfg.TLSMax})
 		}
 
@@ -233,7 +240,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 		if reqCfg.HasToken {
 			token := NewTestToken(f.idp.getLocation())
 
-			if reqCfg.TokenClaims != nil && len(reqCfg.TokenClaims) > 0 {
+			if len(reqCfg.TokenClaims) > 0 {
 				for i := range reqCfg.TokenClaims {
 					err := reflections.SetField(
 						&token.Claims,
@@ -362,8 +369,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			}
 		}
 
-		if reqCfg.ExpectedHeadersValidator != nil &&
-			len(reqCfg.ExpectedHeadersValidator) > 0 {
+		if len(reqCfg.ExpectedHeadersValidator) > 0 {
 			// comment
 			for headerName, headerValidator := range reqCfg.ExpectedHeadersValidator {
 				headers := resp.Header()
@@ -396,7 +402,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			)
 		}
 
-		if reqCfg.ExpectedProxyHeaders != nil && len(reqCfg.ExpectedProxyHeaders) > 0 {
+		if len(reqCfg.ExpectedProxyHeaders) > 0 {
 			for headerName, headerVal := range reqCfg.ExpectedProxyHeaders {
 				headers := upstream.Headers
 
@@ -424,8 +430,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			}
 		}
 
-		if reqCfg.ExpectedProxyHeadersValidator != nil &&
-			len(reqCfg.ExpectedProxyHeadersValidator) > 0 {
+		if len(reqCfg.ExpectedProxyHeadersValidator) > 0 {
 			// comment
 			for headerName, headerValidator := range reqCfg.ExpectedProxyHeadersValidator {
 				headers := upstream.Headers
@@ -673,6 +678,9 @@ func newFakeKeycloakConfig() *config.Config {
 		CookieRefreshName:           constant.RefreshCookie,
 		CookieIDTokenName:           constant.IDTokenCookie,
 		DisableAllLogging:           true,
+		EnablePKCE:                  false,
+		EnableJSONLogging:           false,
+		EnableEncryptedToken:        false,
 		DiscoveryURL:                randomLocalHost,
 		EnableAuthorizationCookies:  true,
 		EnableAuthorizationHeader:   true,
@@ -744,8 +752,8 @@ func makeTestCodeFlowLogin(location string, xforwarded bool) (*http.Response, []
 		}
 
 		if xforwarded {
-			req.Header.Add("X-Forwarded-Host", uri.Host)
-			req.Header.Add("X-Forwarded-Proto", uri.Scheme)
+			req.Header.Add(constant.HeaderXForwardedHost, uri.Host)
+			req.Header.Add(constant.HeaderXForwardedProto, uri.Scheme)
 		}
 
 		if err != nil {

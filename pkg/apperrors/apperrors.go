@@ -36,14 +36,14 @@ var (
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
 	ErrQueryParamValueMismatch         = errors.New("query param value is not allowed")
 	ErrMissingAuthCode                 = errors.New("missing auth code")
-
-	ErrSessionExpiredVerifyOff  = errors.New("the session has expired and verification switch off")
-	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")
-	ErrRefreshTokenNotFound     = errors.New("unable to find refresh token for user")
-	ErrAccTokenRefreshFailure   = errors.New("failed to refresh the access token")
-	ErrEncryptAccToken          = errors.New("unable to encrypt access token")
-	ErrEncryptRefreshToken      = errors.New("failed to encrypt refresh token")
-	ErrEncryptIDToken           = errors.New("unable to encrypt idToken token")
+	ErrInvalidGrantType                = errors.New("invalid grant type is not supported")
+	ErrSessionExpiredVerifyOff         = errors.New("the session has expired and verification switch off")
+	ErrSessionExpiredRefreshOff        = errors.New("session expired and access token refreshing is disabled")
+	ErrRefreshTokenNotFound            = errors.New("unable to find refresh token for user")
+	ErrAccTokenRefreshFailure          = errors.New("failed to refresh the access token")
+	ErrEncryptAccToken                 = errors.New("unable to encrypt access token")
+	ErrEncryptRefreshToken             = errors.New("failed to encrypt refresh token")
+	ErrEncryptIDToken                  = errors.New("unable to encrypt idToken token")
 
 	ErrDelTokFromStore = errors.New("failed to remove old token")
 	ErrSaveTokToStore  = errors.New("failed to store refresh token")
@@ -58,9 +58,10 @@ var (
 	ErrParseRefreshToken              = errors.New("failed to parse refresh token")
 	ErrParseIDToken                   = errors.New("failed to parse id token")
 	ErrParseAccessToken               = errors.New("failed to parse access token")
-	ErrParseIDTokenClaims             = errors.New("faled to parse id token claims")
-	ErrParseAccessTokenClaims         = errors.New("faled to parse access token claims")
-	ErrParseRefreshTokenClaims        = errors.New("faled to parse refresh token claims")
+	ErrParseIDTokenClaims             = errors.New("failed to parse id token claims")
+	ErrParseAccessTokenClaims         = errors.New("failed to parse access token claims")
+	ErrParseRefreshTokenClaims        = errors.New("failed to parse refresh token claims")
+	ErrPATTokenFetch                  = errors.New("failed to get PAT token")
 
 	ErrAccTokenVerifyFailure   = errors.New("access token failed verification")
 	ErrTokenSignature          = errors.New("invalid token signature")
@@ -78,7 +79,11 @@ var (
 	ErrHmacHeaderEmpty = errors.New("request HMAC header empty")
 	ErrHmacMismatch    = errors.New("received HMAC header and calculated HMAC does not match")
 
-	// config errors
+	ErrStartMainHTTP     = errors.New("failed to start main http service")
+	ErrStartRedirectHTTP = errors.New("failed to start http redirect service")
+	ErrStartAdminHTTP    = errors.New("failed to start admin service")
+
+	// config errors.
 
 	ErrNoRedirectsWithEnableRefreshTokensInvalid = errors.New("no-redirects true cannot be enabled with refresh tokens")
 	ErrInvalidPostLoginRedirectPath              = errors.New("post login redirect path invalid, should be only path not absolute url (no hostname, scheme)")
@@ -153,10 +158,13 @@ var (
 	ErrTooManyDefaultAllowedQueryParams     = errors.New("you have more default query params than allowed query params")
 	ErrMissingDefaultQueryParamInAllowed    = errors.New("param is present in default query params but missing in allowed")
 	ErrDefaultQueryParamNotAllowed          = errors.New("default query param is not in allowed query params")
+	ErrLoAWithNoRedirects                   = errors.New("level of authentication is not valid with noredirects=true")
+	ErrLoaWithUMA                           = errors.New("level of authentication is not valid with enable-uma")
 
 	ErrCertSelfNoHostname    = errors.New("no hostnames specified")
 	ErrCertSelfLowExpiration = errors.New("expiration must be greater then 5 minutes")
 
 	ErrLetsEncryptMissingCacheDir = errors.New("letsencrypt cache dir has not been set")
 	ErrHijackerMethodMissing      = errors.New("writer does not implement http.Hijacker method")
+	ErrInvalidOriginWithCreds     = errors.New("origin cannot be set to * together with AllowedCredentials true")
 )

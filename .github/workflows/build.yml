@@ -10,7 +10,7 @@ jobs:
     # Test the latest release of Go
     strategy:
       matrix:
-        go: ["1.22"]
+        go: ["1.23"]
     steps:
       # Setup the workflow to use the specific version of Go
       - name: Set up Go 1.x
@@ -25,7 +25,7 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
       - name: "Create k3d Cluster for E2E testing"
-        uses: AbsaOSS/k3d-action@v1.5.0
+        uses: AbsaOSS/k3d-action@v2.4.0
         with:
           cluster-name: "testcluster"
           args: >-
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ["1.22"]
+        go: ["1.23"]
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -56,6 +56,10 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.59
+          version: v1.61
           args: "--out-${NO_FUTURE}format colored-line-number --timeout=3m"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Check Golang sources with Aligo
+        uses: essentialkaos/aligo-action@v2
+        with:
+          files: ./...

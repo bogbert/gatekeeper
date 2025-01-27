@@ -20,9 +20,10 @@ type RealmRoles struct {
 	Roles []string `json:"roles"`
 }
 
-// Extract custom claims
+// Extract custom claims.
 type CustClaims struct {
 	Email          string                 `json:"email"`
+	Acr            string                 `json:"acr"`
 	PrefName       string                 `json:"preferred_username"`
 	RealmAccess    RealmRoles             `json:"realm_access"`
 	Groups         []string               `json:"groups"`
@@ -34,12 +35,12 @@ type CustClaims struct {
 	Authorization  Permissions            `json:"authorization"`
 }
 
-// isExpired checks if the token has expired
+// isExpired checks if the token has expired.
 func (r *UserContext) IsExpired() bool {
 	return r.ExpiresAt.Before(time.Now())
 }
 
-// String returns a string representation of the user context
+// String returns a string representation of the user context.
 func (r *UserContext) String() string {
 	return fmt.Sprintf(
 		"user: %s, expires: %s, roles: %s",
@@ -49,7 +50,7 @@ func (r *UserContext) String() string {
 	)
 }
 
-// userContext holds the information extracted the token
+// userContext holds the information extracted the token.
 type UserContext struct {
 	// the id of the user
 	ID string
@@ -59,6 +60,8 @@ type UserContext struct {
 	BearerToken bool
 	// the email associated to the user
 	Email string
+	// current level of authentication for user
+	Acr string
 	// the expiration of the access token
 	ExpiresAt time.Time
 	// groups is a collection of groups where user is member

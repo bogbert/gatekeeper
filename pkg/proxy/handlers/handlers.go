@@ -35,10 +35,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// EmptyHandler is responsible for doing nothing
+// EmptyHandler is responsible for doing nothing.
 func EmptyHandler(_ http.ResponseWriter, _ *http.Request) {}
 
-// HealthHandler is a health check handler for the service
+// HealthHandler is a health check handler for the service.
 func HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set(constant.VersionHeader, proxycore.GetVersion())
 	w.WriteHeader(http.StatusOK)
@@ -90,7 +90,7 @@ func MethodNotAllowHandlder(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(nil)
 }
 
-// ProxyMetricsHandler forwards the request into the prometheus handler
+// ProxyMetricsHandler forwards the request into the prometheus handler.
 func ProxyMetricsHandler(
 	localhostMetrics bool,
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
@@ -107,7 +107,7 @@ func ProxyMetricsHandler(
 	}
 }
 
-// RetrieveIDToken retrieves the id token from cookie
+// RetrieveIDToken retrieves the id token from cookie.
 func RetrieveIDToken(
 	cookieIDTokenName string,
 	enableEncryptedToken bool,
@@ -133,7 +133,7 @@ func RetrieveIDToken(
 	return token, encrypted, err
 }
 
-// discoveryHandler provides endpoint info
+// discoveryHandler provides endpoint info.
 func DiscoveryHandler(
 	logger *zap.Logger,
 	withOAuthURI func(string) string,
@@ -158,7 +158,7 @@ func DiscoveryHandler(
 			return
 		}
 
-		wrt.Header().Set("Content-Type", "application/json")
+		wrt.Header().Set(constant.HeaderContentType, "application/json")
 		wrt.WriteHeader(http.StatusOK)
 		_, err = wrt.Write(respBody)
 
@@ -171,7 +171,7 @@ func DiscoveryHandler(
 	}
 }
 
-// getRedirectionURL returns the redirectionURL for the oauth flow
+// getRedirectionURL returns the redirectionURL for the oauth flow.
 func GetRedirectionURL(
 	logger *zap.Logger,
 	redirectionURL string,
@@ -190,8 +190,8 @@ func GetRedirectionURL(
 			var host string
 
 			if noProxy && !noRedirects {
-				scheme = req.Header.Get("X-Forwarded-Proto")
-				host = req.Header.Get("X-Forwarded-Host")
+				scheme = req.Header.Get(constant.HeaderXForwardedProto)
+				host = req.Header.Get(constant.HeaderXForwardedHost)
 			} else {
 				// need to determine the scheme, cx.Request.URL.Scheme doesn't have it, best way is to default
 				// and then check for TLS
@@ -225,7 +225,7 @@ func GetRedirectionURL(
 	}
 }
 
-// ExpirationHandler checks if the token has expired
+// ExpirationHandler checks if the token has expired.
 func ExpirationHandler(
 	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 	cookieAccessName string,
@@ -246,7 +246,7 @@ func ExpirationHandler(
 	}
 }
 
-// TokenHandler display access token to screen
+// TokenHandler display access token to screen.
 func TokenHandler(
 	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 	cookieAccessName string,
@@ -278,7 +278,7 @@ func TokenHandler(
 			return
 		}
 
-		wrt.Header().Set("Content-Type", "application/json")
+		wrt.Header().Set(constant.HeaderContentType, "application/json")
 		_, _ = wrt.Write(result)
 	}
 }

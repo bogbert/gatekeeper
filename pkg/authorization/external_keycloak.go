@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Nerzal/gocloak/v12"
+	"github.com/Nerzal/gocloak/v13"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 )
@@ -26,7 +26,7 @@ func NewKeycloakAuthorizationProvider(
 	targetPath string,
 	idpClient *gocloak.GoCloak,
 	idpTimeout time.Duration,
-	PAT string,
+	pat string,
 	realm string,
 	methodScope *string,
 ) Provider {
@@ -35,7 +35,7 @@ func NewKeycloakAuthorizationProvider(
 		targetPath:  targetPath,
 		idpClient:   idpClient,
 		idpTimeout:  idpTimeout,
-		pat:         PAT,
+		pat:         pat,
 		realm:       realm,
 		methodScope: methodScope,
 	}

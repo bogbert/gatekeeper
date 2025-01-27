@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,7 +18,6 @@ var (
 	Version  = ""
 )
 
-// GetVersion returns the proxy version
 func GetVersion() string {
 	if Version == "" {
 		tm, err := strconv.ParseInt(compiled, 10, 64)
@@ -32,10 +32,10 @@ func GetVersion() string {
 
 type OauthProxies interface {
 	CreateReverseProxy() error
-	Run() error
+	Run() (context.Context, error)
+	Shutdown() error
 }
 
-// ReverseProxy is a wrapper
 type ReverseProxy interface {
 	ServeHTTP(rw http.ResponseWriter, req *http.Request)
 }

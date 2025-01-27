@@ -18,19 +18,22 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
 
-	"github.com/Nerzal/gocloak/v12"
+	"github.com/Nerzal/gocloak/v13"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"golang.org/x/oauth2"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"go.uber.org/zap"
@@ -92,7 +95,7 @@ func authorizationMiddleware(
 				if enableUmaMethodScope {
 					methSc := constant.UmaMethodScope + req.Method
 					if noProxy {
-						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
+						xForwardedMethod := req.Header.Get(constant.HeaderXForwardedMethod)
 						if xForwardedMethod == "" {
 							scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 							accessForbidden(wrt, req)
@@ -105,7 +108,7 @@ func authorizationMiddleware(
 
 				authzPath := req.URL.Path
 				if noProxy {
-					authzPath = req.Header.Get("X-Forwarded-Uri")
+					authzPath = req.Header.Get(constant.HeaderXForwardedURI)
 					if authzPath == "" {
 						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 						accessForbidden(wrt, req)
@@ -200,18 +203,18 @@ func authorizationMiddleware(
 				}
 			}
 
-			switch err {
-			case apperrors.ErrPermissionNotInToken:
+			switch {
+			case errors.Is(err, apperrors.ErrPermissionNotInToken):
 				scope.Logger.Info(apperrors.ErrPermissionNotInToken.Error())
-			case apperrors.ErrResourceRetrieve:
+			case errors.Is(err, apperrors.ErrResourceRetrieve):
 				scope.Logger.Info(apperrors.ErrResourceRetrieve.Error())
-			case apperrors.ErrNoIDPResourceForPath:
+			case errors.Is(err, apperrors.ErrNoIDPResourceForPath):
 				scope.Logger.Info(apperrors.ErrNoIDPResourceForPath.Error())
-			case apperrors.ErrResourceIDNotPresent:
+			case errors.Is(err, apperrors.ErrResourceIDNotPresent):
 				scope.Logger.Info(apperrors.ErrResourceIDNotPresent.Error())
-			case apperrors.ErrTokenScopeNotMatchResourceScope:
+			case errors.Is(err, apperrors.ErrTokenScopeNotMatchResourceScope):
 				scope.Logger.Info(apperrors.ErrTokenScopeNotMatchResourceScope.Error())
-			case apperrors.ErrNoAuthzFound:
+			case errors.Is(err, apperrors.ErrNoAuthzFound):
 			default:
 				if err != nil {
 					scope.Logger.Error(apperrors.ErrFailedAuthzRequest.Error(), zap.Error(err))
@@ -246,6 +249,76 @@ func authorizationMiddleware(
 				accessForbidden(wrt, req)
 				return
 			}
+			next.ServeHTTP(wrt, req)
+		})
+	}
+}
+
+func levelOfAuthenticationMiddleware(
+	logger *zap.Logger,
+	skipTokenVerification bool,
+	scopes []string,
+	enablePKCE bool,
+	signInPage string,
+	cookManager *cookie.Manager,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
+	customSignInPage func(wrt http.ResponseWriter, authURL string),
+	resource *authorization.Resource,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			// we don't need to continue is a decision has been made
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
+			if scope.AccessDenied {
+				next.ServeHTTP(wrt, req)
+				return
+			}
+
+			user := scope.Identity
+			lLog := scope.Logger.With(
+				zap.String("middleware", "levelOfAuthentication"),
+				zap.String("userID", user.ID),
+				zap.String("resource", resource.URL),
+			)
+			if len(resource.Acr) > 0 && user.Acr == "" {
+				lLog.Error("token is missing acr claim=level of authentication")
+				accessForbidden(wrt, req)
+				return
+			}
+			if len(resource.Acr) > 0 && !utils.HasAccess(
+				resource.Acr,
+				[]string{user.Acr},
+				false,
+			) {
+				lLog.Info("token doesn't match required level of authentication")
+				allowedQueryParams := map[string]string{"acr_values": resource.Acr[0]}
+				defaultAllowedQueryParams := map[string]string{"acr_values": resource.Acr[0]}
+				uuid := cookManager.DropStateParameterCookie(req, wrt)
+				query := req.URL.Query()
+				query.Add("state", uuid)
+				req.URL.RawQuery = query.Encode()
+				oauthAuthorizationHandler(
+					lLog,
+					skipTokenVerification,
+					scopes,
+					enablePKCE,
+					signInPage,
+					cookManager,
+					newOAuth2Config,
+					getRedirectionURL,
+					customSignInPage,
+					allowedQueryParams,
+					defaultAllowedQueryParams,
+				)(wrt, req)
+				return
+			}
+
 			next.ServeHTTP(wrt, req)
 		})
 	}

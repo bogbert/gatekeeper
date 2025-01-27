@@ -19,11 +19,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/Nerzal/gocloak/v12"
+	"github.com/Nerzal/gocloak/v13"
+	"github.com/cenkalti/backoff/v4"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
@@ -36,8 +36,67 @@ import (
 	"go.uber.org/zap"
 )
 
-//nolint:cyclop
 func getPAT(
+	ctx context.Context,
+	clientID string,
+	clientSecret string,
+	realm string,
+	openIDProviderTimeout time.Duration,
+	grantType string,
+	idpClient *gocloak.GoCloak,
+	forwardingUsername string,
+	forwardingPassword string,
+) (*gocloak.JWT, *jwt.Claims, error) {
+	cntx, cancel := context.WithTimeout(
+		ctx,
+		openIDProviderTimeout,
+	)
+	defer cancel()
+
+	var token *gocloak.JWT
+	var err error
+
+	switch grantType {
+	case configcore.GrantTypeClientCreds:
+		token, err = idpClient.LoginClient(
+			cntx,
+			clientID,
+			clientSecret,
+			realm,
+		)
+	case configcore.GrantTypeUserCreds:
+		token, err = idpClient.Login(
+			cntx,
+			clientID,
+			clientSecret,
+			realm,
+			forwardingUsername,
+			forwardingPassword,
+		)
+	default:
+		return nil, nil, apperrors.ErrInvalidGrantType
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parsedToken, err := jwt.ParseSigned(token.AccessToken, constant.SignatureAlgs[:])
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stdClaims := &jwt.Claims{}
+	err = parsedToken.UnsafeClaimsWithoutVerification(stdClaims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return token, stdClaims, err
+}
+
+func refreshPAT(
+	ctx context.Context,
 	logger *zap.Logger,
 	pat *PAT,
 	clientID string,
@@ -52,8 +111,7 @@ func getPAT(
 	forwardingUsername string,
 	forwardingPassword string,
 	done chan bool,
-) {
-	retry := 0
+) error {
 	initialized := false
 	grantType := configcore.GrantTypeClientCreds
 
@@ -62,57 +120,45 @@ func getPAT(
 	}
 
 	for {
-		if retry > 0 {
-			logger.Info(
-				"retrying fetching PAT token",
-				zap.Int("retry", retry),
-			)
-		}
-
-		ctx, cancel := context.WithTimeout(
-			context.Background(),
-			openIDProviderTimeout,
-		)
-
 		var token *gocloak.JWT
-		var err error
-
-		switch grantType {
-		case configcore.GrantTypeClientCreds:
-			token, err = idpClient.LoginClient(
-				ctx,
+		var claims *jwt.Claims
+		operation := func() error {
+			var err error
+			pCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			token, claims, err = getPAT(
+				pCtx,
 				clientID,
 				clientSecret,
 				realm,
-			)
-		case configcore.GrantTypeUserCreds:
-			token, err = idpClient.Login(
-				ctx,
-				clientID,
-				clientSecret,
-				realm,
+				openIDProviderTimeout,
+				grantType,
+				idpClient,
 				forwardingUsername,
 				forwardingPassword,
 			)
-		default:
-			logger.Error(
-				"Chosen grant type is not supported",
-				zap.String("grant_type", grantType),
-			)
-			os.Exit(1)
+			return err
 		}
 
+		notify := func(err error, delay time.Duration) {
+			logger.Error(
+				err.Error(),
+				zap.Duration("retry after", delay),
+			)
+		}
+
+		bom := backoff.WithMaxRetries(
+			backoff.NewConstantBackOff(patRetryInterval),
+			//nolint:gosec
+			uint64(patRetryCount),
+		)
+		boCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		box := backoff.WithContext(bom, boCtx)
+		err := backoff.RetryNotify(operation, box, notify)
+
 		if err != nil {
-			retry++
-			logger.Error("problem getting PAT token", zap.Error(err))
-
-			if retry >= patRetryCount {
-				cancel()
-				os.Exit(1)
-			}
-
-			<-time.After(patRetryInterval)
-			continue
+			return err
 		}
 
 		pat.m.Lock()
@@ -121,37 +167,25 @@ func getPAT(
 
 		if !initialized {
 			done <- true
+			initialized = true
 		}
 
-		initialized = true
-
-		parsedToken, err := jwt.ParseSigned(token.AccessToken, constant.SignatureAlgs[:])
-		if err != nil {
-			retry++
-			logger.Error("failed to parse the access token", zap.Error(err))
-			<-time.After(patRetryInterval)
-			continue
-		}
-
-		stdClaims := &jwt.Claims{}
-		err = parsedToken.UnsafeClaimsWithoutVerification(stdClaims)
-		if err != nil {
-			retry++
-			logger.Error("unable to parse access token for claims", zap.Error(err))
-			<-time.After(patRetryInterval)
-			continue
-		}
-
-		retry = 0
-		expiration := stdClaims.Expiry.Time()
+		expiration := claims.Expiry.Time()
 		refreshIn := utils.GetWithin(expiration, constant.PATRefreshInPercent)
 
 		logger.Info(
-			"waiting for expiration of access token",
+			"waiting for access token expiration",
 			zap.Float64("refresh_in", refreshIn.Seconds()),
 		)
 
-		<-time.After(refreshIn)
+		refreshTimer := time.NewTimer(refreshIn)
+		select {
+		case <-ctx.Done():
+			logger.Info("shutdown PAT refresh routine")
+			refreshTimer.Stop()
+			return nil
+		case <-refreshTimer.C:
+		}
 	}
 }
 
@@ -196,7 +230,7 @@ func WithUMAIdentity(
 	return authzFunc(targetPath, umaUser.Permissions)
 }
 
-// getRPT retrieves relaying party token
+// getRPT retrieves relaying party token.
 func getRPT(
 	ctx context.Context,
 	pat *PAT,
@@ -225,8 +259,8 @@ func getRPT(
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"%s %s",
-			apperrors.ErrNoIDPResourceForPath.Error(),
+			"%w %w",
+			apperrors.ErrNoIDPResourceForPath,
 			err,
 		)
 	}

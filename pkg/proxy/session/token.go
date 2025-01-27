@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -24,7 +25,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// GetRefreshTokenFromCookie returns the refresh token from the cookie if any
+// GetRefreshTokenFromCookie returns the refresh token from the cookie if any.
 func GetRefreshTokenFromCookie(req *http.Request, cookieName string) (string, error) {
 	token, err := GetTokenInCookie(req, cookieName)
 	if err != nil {
@@ -49,14 +50,14 @@ func GetTokenInRequest(
 
 	if tokenHeader == "" && !skipAuthorizationHeaderIdentity {
 		token, err = GetTokenInBearer(req)
-		if err != nil && err != apperrors.ErrSessionNotFound {
+		if err != nil && !errors.Is(err, apperrors.ErrSessionNotFound) {
 			return "", false, err
 		}
 	}
 
 	if tokenHeader != "" {
 		token, err = GetTokenInHeader(req, tokenHeader)
-		if err != nil && err != apperrors.ErrSessionNotFound {
+		if err != nil && !errors.Is(err, apperrors.ErrSessionNotFound) {
 			return "", false, err
 		}
 	}
@@ -72,7 +73,7 @@ func GetTokenInRequest(
 	return token, bearer, nil
 }
 
-// getTokenInBearer retrieves a access token from the authorization header
+// getTokenInBearer retrieves a access token from the authorization header.
 func GetTokenInBearer(req *http.Request) (string, error) {
 	token := req.Header.Get(constant.AuthorizationHeader)
 	if token == "" {
@@ -91,7 +92,7 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 	return items[1], nil
 }
 
-// getTokenInHeader retrieves a token from the header
+// getTokenInHeader retrieves a token from the header.
 func GetTokenInHeader(req *http.Request, headerName string) (string, error) {
 	token := req.Header.Get(headerName)
 	if token == "" {
@@ -100,7 +101,7 @@ func GetTokenInHeader(req *http.Request, headerName string) (string, error) {
 	return token, nil
 }
 
-// getTokenInCookie retrieves the access token from the request cookies
+// getTokenInCookie retrieves the access token from the request cookies.
 func GetTokenInCookie(req *http.Request, name string) (string, error) {
 	var token bytes.Buffer
 
@@ -124,7 +125,7 @@ func GetTokenInCookie(req *http.Request, name string) (string, error) {
 	return token.String(), nil
 }
 
-// GetIdentity retrieves the user identity from a request, either from a session cookie or a bearer token
+// GetIdentity retrieves the user identity from a request, either from a session cookie or a bearer token.
 func GetIdentity(
 	logger *zap.Logger,
 	skipAuthorizationHeaderIdentity bool,
@@ -176,7 +177,7 @@ func GetIdentity(
 	}
 }
 
-// ExtractIdentity parse the jwt token and extracts the various elements is order to construct
+// ExtractIdentity parse the jwt token and extracts the various elements is order to construct.
 func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 	stdClaims := &jwt.Claims{}
 	customClaims := models.CustClaims{}
@@ -240,6 +241,7 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 	return &models.UserContext{
 		Audiences:     audiences,
 		Email:         customClaims.Email,
+		Acr:           customClaims.Acr,
 		ExpiresAt:     stdClaims.Expiry.Time(),
 		Groups:        customClaims.Groups,
 		ID:            stdClaims.Subject,
@@ -251,7 +253,7 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 	}, nil
 }
 
-// retrieveRefreshToken retrieves the refresh token from store or cookie
+// retrieveRefreshToken retrieves the refresh token from store or cookie.
 func RetrieveRefreshToken(
 	store storage.Storage,
 	cookieRefreshName string,
@@ -278,7 +280,7 @@ func RetrieveRefreshToken(
 	return token, encrypted, err
 }
 
-// GetAccessCookieExpiration calculates the expiration of the access token cookie
+// GetAccessCookieExpiration calculates the expiration of the access token cookie.
 func GetAccessCookieExpiration(
 	logger *zap.Logger,
 	accessTokenDuration time.Duration,
@@ -369,7 +371,7 @@ func GetCodeFlowTokens(
 	return resp.AccessToken, idToken, resp.RefreshToken, nil
 }
 
-// exchangeAuthenticationCode exchanges the authentication code with the oauth server for a access token
+// exchangeAuthenticationCode exchanges the authentication code with the oauth server for a access token.
 func exchangeAuthenticationCode(
 	ctx context.Context,
 	oConfig *oauth2.Config,

@@ -24,11 +24,10 @@ import (
 )
 
 const (
-	// normalizeFlags is the options to purell
 	normalizeFlags purell.NormalizationFlags = purell.FlagRemoveDotSegments | purell.FlagRemoveDuplicateSlashes
 )
 
-// entrypointMiddleware is custom filtering for incoming requests
+// entrypointMiddleware is custom filtering for incoming requests.
 func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
@@ -66,7 +65,7 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// requestIDMiddleware is responsible for adding a request id if none found
+// requestIDMiddleware is responsible for adding a request id if none found.
 func RequestIDMiddleware(header string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
@@ -83,7 +82,7 @@ func RequestIDMiddleware(header string) func(http.Handler) http.Handler {
 	}
 }
 
-// loggingMiddleware is a custom http logger
+// loggingMiddleware is a custom http logger.
 func LoggingMiddleware(
 	logger *zap.Logger,
 	verbose bool,
@@ -138,7 +137,7 @@ func LoggingMiddleware(
 	}
 }
 
-// ResponseHeaderMiddleware is responsible for adding response headers
+// ResponseHeaderMiddleware is responsible for adding response headers.
 func ResponseHeaderMiddleware(headers map[string]string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
@@ -152,7 +151,6 @@ func ResponseHeaderMiddleware(headers map[string]string) func(http.Handler) http
 	}
 }
 
-// DenyMiddleware
 func DenyMiddleware(
 	logger *zap.Logger,
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
@@ -165,7 +163,7 @@ func DenyMiddleware(
 	}
 }
 
-// ProxyDenyMiddleware just block everything
+// ProxyDenyMiddleware just block everything.
 func ProxyDenyMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
@@ -183,7 +181,7 @@ func ProxyDenyMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				}
 			}
 
-			scope.AccessDenied = true
+			scope.NoProxy = true
 			// update the request context
 			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
 
@@ -192,7 +190,6 @@ func ProxyDenyMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// MethodCheck middleware
 func MethodCheckMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		logger.Info("enabling the method check middleware")
@@ -268,7 +265,7 @@ func IdentityHeadersMiddleware(
 				}
 				// add the authorization header if requested
 				if enableAuthzHeader {
-					headers.Set("Authorization", "Bearer "+user.RawToken)
+					headers.Set(constant.AuthorizationHeader, "Bearer "+user.RawToken)
 				}
 				// are we filtering out the cookies
 				if !enableAuthzCookies {
@@ -316,20 +313,19 @@ func ProxyMiddleware(
 					logger.Error(apperrors.ErrAssertionFailed.Error())
 					return
 				}
-				if scope.AccessDenied {
+				if scope.AccessDenied || scope.NoProxy {
 					return
 				}
 			}
 
 			// @step: add the proxy forwarding headers
-			req.Header.Set("X-Real-IP", utils.RealIP(req))
+			req.Header.Set(constant.HeaderXRealIP, utils.RealIP(req))
 			if xff := req.Header.Get(constant.HeaderXForwardedFor); xff == "" {
-				req.Header.Set("X-Forwarded-For", utils.RealIP(req))
-			} else {
-				req.Header.Set("X-Forwarded-For", xff)
+				req.Header.Set(constant.HeaderXForwardedFor, utils.RealIP(req))
 			}
-			req.Header.Set("X-Forwarded-Host", req.Host)
-			req.Header.Set("X-Forwarded-Proto", req.Header.Get("X-Forwarded-Proto"))
+			if xfh := req.Header.Get(constant.HeaderXForwardedHost); xfh == "" {
+				req.Header.Set(constant.HeaderXForwardedHost, req.Host)
+			}
 
 			if len(corsOrigins) > 0 {
 				// if CORS is enabled by Gatekeeper, do not propagate CORS requests upstream
@@ -375,18 +371,17 @@ func ProxyMiddleware(
 	}
 }
 
-// ForwardAuthMiddleware
 func ForwardAuthMiddleware(logger *zap.Logger, oAuthURI string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		logger.Info("enabling the forward-auth middleware")
 
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			if !strings.Contains(req.URL.Path, oAuthURI) { // this condition is here only because of tests to work
-				if forwardedPath := req.Header.Get("X-Forwarded-Uri"); forwardedPath != "" {
+				if forwardedPath := req.Header.Get(constant.HeaderXForwardedURI); forwardedPath != "" {
 					req.URL.Path = forwardedPath
 					req.URL.RawPath = forwardedPath
 				}
-				if forwardedMethod := req.Header.Get("X-Forwarded-Method"); forwardedMethod != "" {
+				if forwardedMethod := req.Header.Get(constant.HeaderXForwardedMethod); forwardedMethod != "" {
 					req.Method = forwardedMethod
 				}
 			}

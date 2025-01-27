@@ -22,8 +22,10 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	var umaCookieName = "TESTUMACOOKIE"
 
 	BeforeEach(func() {
+		var err error
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
-		portNum = generateRandomPort()
+		portNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
 		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
@@ -40,6 +42,8 @@ var _ = Describe("UMA Code Flow authorization", func() {
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
 			"--secure-cookie=false",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -50,7 +54,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 		It("should login with user/password and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaAllowedPath, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddress+umaAllowedPath, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
 			body := resp.Body()
@@ -76,7 +80,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	When("Accessing resource, which does not exist", func() {
 		It("should be forbidden without permission ticket", func(_ context.Context) {
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaNonExistentPath, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress+umaNonExistentPath, http.StatusForbidden, testUser, testPass)
 
 			body := resp.Body()
 			Expect(strings.Contains(string(body), umaCookieName)).To(BeFalse())
@@ -87,7 +91,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 		It("should be forbidden and then allowed", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaForbiddenPath, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress+umaForbiddenPath, http.StatusForbidden, testUser, testPass)
 
 			body := resp.Body()
 			Expect(strings.Contains(string(body), umaCookieName)).To(BeFalse())
@@ -115,8 +119,10 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 	var umaCookieName = "TESTUMACOOKIE"
 
 	BeforeEach(func() {
+		var err error
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
-		portNum = generateRandomPort()
+		portNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
 		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
@@ -136,6 +142,8 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 			"--secure-cookie=false",
 			"--verbose=true",
 			"--enable-logging=true",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -146,7 +154,7 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 		It("should login with user/password, don't access forbidden resource and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaMethodAllowedPath, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddress+umaMethodAllowedPath, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
 			body := resp.Body()
@@ -177,9 +185,12 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 	var fwdProxyAddress string
 
 	BeforeEach(func() {
+		var err error
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
-		portNum = generateRandomPort()
-		fwdPortNum = generateRandomPort()
+		portNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
+		fwdPortNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
 		proxyAddress = localURI + portNum
 		fwdProxyAddress = localURI + fwdPortNum
 		osArgs := []string{os.Args[0]}
@@ -198,6 +209,8 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
 			"--enable-idp-session-check=false",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		fwdProxyArgs := []string{
@@ -214,6 +227,8 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -257,9 +272,12 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 	var fwdProxyAddress string
 
 	BeforeEach(func() {
+		var err error
 		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
-		portNum = generateRandomPort()
-		fwdPortNum = generateRandomPort()
+		portNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
+		fwdPortNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
 		proxyAddress = localURI + portNum
 		fwdProxyAddress = localURI + fwdPortNum
 		osArgs := []string{os.Args[0]}
@@ -279,6 +297,8 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 			"--openid-provider-retry-count=30",
 			"--verbose=true",
 			"--enable-idp-session-check=false",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		fwdProxyArgs := []string{
@@ -296,6 +316,8 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -355,7 +377,9 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 	// server := httptest.NewServer(&testsuite.FakeUpstreamService{})
 
 	BeforeEach(func() {
-		portNum = generateRandomPort()
+		var err error
+		portNum, err = generateRandomPort()
+		Expect(err).NotTo(HaveOccurred())
 		proxyAddress = localURI + portNum
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
@@ -375,6 +399,8 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 			"--secure-cookie=false",
 			"--verbose=true",
 			"--enable-logging=true",
+			"--enable-encrypted-token=false",
+			"--enable-pkce=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -386,12 +412,12 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 			var err error
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{
-				"X-Forwarded-Proto":  "http",
-				"X-Forwarded-Host":   strings.Split(proxyAddress, "//")[1],
-				"X-Forwarded-URI":    umaMethodAllowedPath,
-				"X-Forwarded-Method": "GET",
+				constant.HeaderXForwardedProto:  "http",
+				constant.HeaderXForwardedHost:   strings.Split(proxyAddress, "//")[1],
+				constant.HeaderXForwardedURI:    umaMethodAllowedPath,
+				constant.HeaderXForwardedMethod: "GET",
 			})
-			resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).ToNot(BeEmpty())
 
 			resp, err = rClient.R().Get(proxyAddress + logoutURI)
@@ -408,12 +434,12 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 		It("should be forbidden", func(_ context.Context) {
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{
-				"X-Forwarded-Proto":  "http",
-				"X-Forwarded-Host":   strings.Split(proxyAddress, "//")[1],
-				"X-Forwarded-URI":    umaMethodAllowedPath,
-				"X-Forwarded-Method": "POST",
+				constant.HeaderXForwardedProto:  "http",
+				constant.HeaderXForwardedHost:   strings.Split(proxyAddress, "//")[1],
+				constant.HeaderXForwardedURI:    umaMethodAllowedPath,
+				constant.HeaderXForwardedMethod: "POST",
 			})
-			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden, testUser, testPass)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).To(BeEmpty())
 		})
 	})
@@ -422,11 +448,11 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 		It("should be forbidden", func(_ context.Context) {
 			rClient := resty.New()
 			rClient.SetHeaders(map[string]string{
-				"X-Forwarded-Proto": "http",
-				"X-Forwarded-Host":  strings.Split(proxyAddress, "//")[1],
-				"X-Forwarded-URI":   umaMethodAllowedPath,
+				constant.HeaderXForwardedProto: "http",
+				constant.HeaderXForwardedHost:  strings.Split(proxyAddress, "//")[1],
+				constant.HeaderXForwardedURI:   umaMethodAllowedPath,
 			})
-			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden, testUser, testPass)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).To(BeEmpty())
 		})
 	})

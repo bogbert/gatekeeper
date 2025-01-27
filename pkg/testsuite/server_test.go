@@ -27,6 +27,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,7 +58,8 @@ func TestNewKeycloakProxy(t *testing.T) {
 	assert.NotNil(t, proxy.Config)
 	assert.NotNil(t, proxy.Router)
 	assert.NotNil(t, proxy.Endpoint)
-	require.NoError(t, proxy.Run())
+	_, err = proxy.Run()
+	require.NoError(t, err)
 }
 
 func TestNewKeycloakProxyWithLegacyDiscoveryURI(t *testing.T) {
@@ -77,7 +79,8 @@ func TestNewKeycloakProxyWithLegacyDiscoveryURI(t *testing.T) {
 	assert.NotNil(t, proxy.Config)
 	assert.NotNil(t, proxy.Router)
 	assert.NotNil(t, proxy.Endpoint)
-	require.NoError(t, proxy.Run())
+	_, err = proxy.Run()
+	require.NoError(t, err)
 }
 
 func TestReverseProxyHeaders(t *testing.T) {
@@ -100,6 +103,7 @@ func TestReverseProxyHeaders(t *testing.T) {
 			},
 			ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 				"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
+					t.Helper()
 					assert.Equal(t, jwt, value)
 					assert.False(t, checkAccessTokenEncryption(t, c, value))
 				},
@@ -136,6 +140,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedCode:  http.StatusOK,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
+							t.Helper()
 							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
@@ -147,6 +152,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
+							t.Helper()
 							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
@@ -173,6 +179,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedCode:  http.StatusOK,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
+							t.Helper()
 							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
@@ -184,6 +191,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
+							t.Helper()
 							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
@@ -563,7 +571,7 @@ func TestSkipOpenIDProviderTLSVerifyForwardingProxy(t *testing.T) {
 	cfg.ForwardingUsername = ValidUsername
 	cfg.ForwardingPassword = ValidPassword
 	cfg.SkipOpenIDProviderTLSVerify = true
-	cfg.ForwardingGrantType = "password"
+	cfg.ForwardingGrantType = constant.ForwardingGrantTypePassword
 	s := httptest.NewServer(&FakeUpstreamService{})
 	requests := []fakeRequest{
 		{
@@ -585,7 +593,7 @@ func TestSkipOpenIDProviderTLSVerifyForwardingProxy(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf(apperrors.ErrAssertionFailed.Error())
+				t.Fatal(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(
@@ -857,7 +865,7 @@ func TestSkipOpenIDProviderTLSVerify(t *testing.T) {
 							failure, assertOk := r.(string)
 
 							if !assertOk {
-								t.Fatalf(apperrors.ErrAssertionFailed.Error())
+								t.Fatal(apperrors.ErrAssertionFailed.Error())
 							}
 
 							check := strings.Contains(
@@ -909,7 +917,7 @@ func TestOpenIDProviderProxy(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf(apperrors.ErrAssertionFailed.Error())
+				t.Fatal(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(
@@ -1349,8 +1357,8 @@ func TestNoProxy(t *testing.T) {
 					},
 					ExpectedLocation: "https://thiswillbereplaced/oauth",
 					Headers: map[string]string{
-						"X-Forwarded-Host":  "thiswillbereplaced",
-						"X-Forwarded-Proto": "https",
+						constant.HeaderXForwardedHost:  "thiswillbereplaced",
+						constant.HeaderXForwardedProto: "https",
 					},
 				},
 			},
@@ -1423,8 +1431,8 @@ func TestNoProxy(t *testing.T) {
 						assert.Equal(t, "", body)
 					},
 					Headers: map[string]string{
-						"X-Forwarded-Uri":    "/private",
-						"X-Forwarded-Method": "POST",
+						constant.HeaderXForwardedURI:    "/private",
+						constant.HeaderXForwardedMethod: "POST",
 					},
 				},
 				{
@@ -1438,8 +1446,8 @@ func TestNoProxy(t *testing.T) {
 						assert.Equal(t, "", body)
 					},
 					Headers: map[string]string{
-						"X-Forwarded-Uri":    "/private",
-						"X-Forwarded-Method": "DELETE",
+						constant.HeaderXForwardedURI:    "/private",
+						constant.HeaderXForwardedMethod: "DELETE",
 					},
 				},
 			},
@@ -1490,7 +1498,7 @@ func TestProxyProtocol(t *testing.T) {
 			HasToken:      true,
 			ExpectedProxy: true,
 			ExpectedProxyHeaders: map[string]string{
-				"X-Forwarded-For": "127.0.0.1",
+				constant.HeaderXForwardedFor: "127.0.0.1",
 			},
 			ExpectedCode: http.StatusOK,
 		},
@@ -1500,7 +1508,7 @@ func TestProxyProtocol(t *testing.T) {
 			ProxyProtocol: "189.10.10.1",
 			ExpectedProxy: true,
 			ExpectedProxyHeaders: map[string]string{
-				"X-Forwarded-For": "189.10.10.1",
+				constant.HeaderXForwardedFor: "189.10.10.1",
 			},
 			ExpectedCode: http.StatusOK,
 		},
@@ -1515,7 +1523,7 @@ func TestXForwarded(t *testing.T) {
 		ExecutionSettings []fakeRequest
 	}{
 		{
-			Name: "TestEmptyXForwarded",
+			Name: "TestEmptyXForwardedFor",
 			ProxySettings: func(_ *config.Config) {
 			},
 			ExecutionSettings: []fakeRequest{
@@ -1524,15 +1532,15 @@ func TestXForwarded(t *testing.T) {
 					HasToken:      true,
 					ExpectedProxy: true,
 					ExpectedProxyHeaders: map[string]string{
-						"X-Forwarded-For": "127.0.0.1",
-						"X-Real-IP":       "127.0.0.1",
+						constant.HeaderXForwardedFor: "127.0.0.1",
+						constant.HeaderXRealIP:       "127.0.0.1",
 					},
 					ExpectedCode: http.StatusOK,
 				},
 			},
 		},
 		{
-			Name: "TestXForwardedPresent",
+			Name: "TestXForwardedForPresent",
 			ProxySettings: func(_ *config.Config) {
 			},
 			ExecutionSettings: []fakeRequest{
@@ -1541,11 +1549,11 @@ func TestXForwarded(t *testing.T) {
 					HasToken:      true,
 					ExpectedProxy: true,
 					Headers: map[string]string{
-						"X-Forwarded-For": "189.10.10.1",
+						constant.HeaderXForwardedFor: "189.10.10.1",
 					},
 					ExpectedProxyHeaders: map[string]string{
-						"X-Forwarded-For": "189.10.10.1",
-						"X-Real-IP":       "189.10.10.1",
+						constant.HeaderXForwardedFor: "189.10.10.1",
+						constant.HeaderXRealIP:       "189.10.10.1",
 					},
 					ExpectedCode: http.StatusOK,
 				},
@@ -1561,11 +1569,87 @@ func TestXForwarded(t *testing.T) {
 					HasToken:      true,
 					ExpectedProxy: true,
 					Headers: map[string]string{
-						"X-Real-IP": "189.10.10.1",
+						constant.HeaderXRealIP: "189.10.10.1",
 					},
 					ExpectedProxyHeaders: map[string]string{
-						"X-Forwarded-For": "189.10.10.1",
-						"X-Real-IP":       "189.10.10.1",
+						constant.HeaderXForwardedFor: "189.10.10.1",
+						constant.HeaderXRealIP:       "189.10.10.1",
+					},
+					ExpectedCode: http.StatusOK,
+				},
+			},
+		},
+		{
+			Name: "TestEmptyXForwardedHost",
+			ProxySettings: func(_ *config.Config) {
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAuthAllURL + FakeTestURL,
+					HasToken:      true,
+					ExpectedProxy: true,
+					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
+						constant.HeaderXForwardedHost: func(t *testing.T, _ *config.Config, value string) {
+							t.Helper()
+							assert.Contains(t, value, "127.0.0.1")
+						},
+					},
+					ExpectedCode: http.StatusOK,
+				},
+			},
+		},
+		{
+			Name: "TestXForwardedHostPresent",
+			ProxySettings: func(_ *config.Config) {
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAuthAllURL + FakeTestURL,
+					HasToken:      true,
+					ExpectedProxy: true,
+					Headers: map[string]string{
+						constant.HeaderXForwardedHost: "189.10.10.1",
+					},
+					ExpectedProxyHeaders: map[string]string{
+						constant.HeaderXForwardedHost: "189.10.10.1",
+					},
+					ExpectedCode: http.StatusOK,
+				},
+			},
+		},
+		{
+			Name: "TestEmptyXForwardedHost",
+			ProxySettings: func(_ *config.Config) {
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAuthAllURL + FakeTestURL,
+					HasToken:      true,
+					ExpectedProxy: true,
+					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
+						"X-Forwarded-Host": func(t *testing.T, _ *config.Config, value string) {
+							t.Helper()
+							assert.Contains(t, value, "127.0.0.1")
+						},
+					},
+					ExpectedCode: http.StatusOK,
+				},
+			},
+		},
+		{
+			Name: "TestXForwardedHostPresent",
+			ProxySettings: func(_ *config.Config) {
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAuthAllURL + FakeTestURL,
+					HasToken:      true,
+					ExpectedProxy: true,
+					Headers: map[string]string{
+						"X-Forwarded-Host": "189.10.10.1",
+					},
+					ExpectedProxyHeaders: map[string]string{
+						"X-Forwarded-Host": "189.10.10.1",
 					},
 					ExpectedCode: http.StatusOK,
 				},
@@ -1622,10 +1706,10 @@ func TestTokenEncryption(t *testing.T) {
 					ExpectedProxy: true,
 					Redirects:     true,
 					ExpectedProxyHeaders: map[string]string{
-						"X-Auth-Email":    "gambol99@gmail.com",
-						"X-Auth-Userid":   "rjayawardene",
-						"X-Auth-Username": "rjayawardene",
-						"X-Forwarded-For": "127.0.0.1",
+						"X-Auth-Email":               "gambol99@gmail.com",
+						"X-Auth-Userid":              "rjayawardene",
+						"X-Auth-Username":            "rjayawardene",
+						constant.HeaderXForwardedFor: "127.0.0.1",
 					},
 					ExpectedCode: http.StatusOK,
 				},
@@ -1844,8 +1928,11 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLS",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
+				//nolint:gosec
 				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
 				conf.NoRedirects = true
@@ -1863,11 +1950,14 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLSMatch",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
+				//nolint:gosec
 				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
-				conf.TLSMinVersion = "tlsv1.0"
+				conf.TLSMinVersion = constant.TLS13
 				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
@@ -1875,7 +1965,7 @@ func TestTLS(t *testing.T) {
 					URL:          fmt.Sprintf("https://%s/test", testProxyAddr),
 					ExpectedCode: http.StatusUnauthorized,
 					RequestCA:    fakeCA,
-					TLSMin:       tls.VersionTLS10,
+					TLSMin:       tls.VersionTLS13,
 					Redirects:    false,
 				},
 			},
@@ -1884,11 +1974,14 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLSDiffer",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
+				//nolint:gosec
 				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
-				conf.TLSMinVersion = "tlsv1.2"
+				conf.TLSMinVersion = constant.TLS12
 				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
@@ -1905,11 +1998,14 @@ func TestTLS(t *testing.T) {
 			Name: "TestProxyTLSMinNotFullfilled",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableDefaultDeny = true
+				//nolint:gosec
 				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				//nolint:gosec
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
-				conf.TLSMinVersion = "tlsv1.3"
+				conf.TLSMinVersion = constant.TLS13
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1947,7 +2043,7 @@ func TestTLS(t *testing.T) {
 
 				if certFile != "" {
 					fakeCertByte := []byte(fakeCert)
-					err := os.WriteFile(certFile, fakeCertByte, 0644)
+					err := os.WriteFile(certFile, fakeCertByte, 0600)
 
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
@@ -1957,7 +2053,7 @@ func TestTLS(t *testing.T) {
 
 				if privFile != "" {
 					fakeKeyByte := []byte(fakePrivateKey)
-					err := os.WriteFile(privFile, fakeKeyByte, 0644)
+					err := os.WriteFile(privFile, fakeKeyByte, 0600)
 
 					if err != nil {
 						t.Fatalf("Problem writing privateKey %s", err)
@@ -1967,7 +2063,7 @@ func TestTLS(t *testing.T) {
 
 				if caFile != "" {
 					fakeCAByte := []byte(fakeCA)
-					err := os.WriteFile(caFile, fakeCAByte, 0644)
+					err := os.WriteFile(caFile, fakeCAByte, 0600)
 
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
@@ -2161,6 +2257,83 @@ func TestCustomHTTPMethod(t *testing.T) {
 				testCase.ProxySettings(c)
 				p := newFakeProxy(c, &fakeAuthConfig{})
 				p.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
+}
+
+func TestGraceTimeout(t *testing.T) {
+	cfg := newFakeKeycloakConfig()
+	cfg.EnableForwarding = true
+	cfg.PatRetryCount = 5
+	cfg.PatRetryInterval = 2 * time.Second
+	cfg.OpenIDProviderTimeout = 30 * time.Second
+	cfg.ForwardingDomains = []string{}
+	cfg.ForwardingUsername = ValidUsername
+	cfg.ForwardingPassword = ValidPassword
+	cfg.SkipOpenIDProviderTLSVerify = true
+	cfg.ForwardingGrantType = constant.ForwardingGrantTypePassword
+
+	fakeServer := httptest.NewServer(&FakeUpstreamService{})
+
+	testCases := []struct {
+		Name                 string
+		ServerGraceTimeout   time.Duration
+		ResponseDelay        string
+		ExpectedCode         int
+		ExpectedRequestError string
+		ExpectedProxy        bool
+	}{
+		{
+			Name:                 "TestGraceTimeout",
+			ServerGraceTimeout:   2 * time.Second,
+			ResponseDelay:        "1",
+			ExpectedCode:         http.StatusOK,
+			ExpectedRequestError: "",
+			ExpectedProxy:        true,
+		},
+		// {
+		// 	Name:                 "TestGraceTimeoutClosedServer",
+		// 	ServerGraceTimeout:   time.Second,
+		// 	ResponseDelay:        "2",
+		// 	ExpectedCode:         0,
+		// 	ExpectedRequestError: "EOF",
+		// 	ExpectedProxy:        false,
+		// },
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				cfg.ServerGraceTimeout = testCase.ServerGraceTimeout
+
+				var waitShutdown sync.WaitGroup
+				waitShutdown.Add(1)
+
+				requests := []fakeRequest{
+					{
+						URL:                  fakeServer.URL + FakeTestURL,
+						ProxyRequest:         true,
+						ExpectedProxy:        testCase.ExpectedProxy,
+						ExpectedCode:         testCase.ExpectedCode,
+						ExpectedRequestError: testCase.ExpectedRequestError,
+						Headers:              map[string]string{"delay": testCase.ResponseDelay},
+					},
+				}
+
+				proxy := newFakeProxy(cfg, &fakeAuthConfig{EnableTLS: true})
+				<-time.After(time.Duration(100) * time.Millisecond)
+
+				go func() {
+					defer waitShutdown.Done()
+					<-time.After(time.Duration(200) * time.Millisecond)
+					if err := proxy.Shutdown(); err != nil {
+						t.Error("Failed to shutdown proxy")
+					}
+				}()
+				proxy.RunTests(t, requests)
+				waitShutdown.Wait()
 			},
 		)
 	}

@@ -44,10 +44,10 @@ weight: 2
 |    --enable-logout-redirect                | indicates we should redirect to the identity provider for logging out | false | PROXY_ENABLE_LOGOUT_REDIRECT
 |    --enable-default-deny                   | enables a default denial on all requests, requests with valid token are permitted, you have to explicitly say what is permitted | true | PROXY_ENABLE_DEFAULT_DENY
 |    --enable-default-deny-strict            | enables a default denial on all requests, requests with valid token are denied, you have to explicitly say what is permitted (recommended) | false | PROXY_ENABLE_DEFAULT_DENY_STRICT
-|    --enable-encrypted-token                | enable encryption for the access tokens | false | PROXY_ENABLE_ENCRYPTED_TOKEN
+|    --enable-encrypted-token                | enable encryption for the access tokens | true | PROXY_ENABLE_ENCRYPTED_TOKEN
 |    --force-encrypted-cookie                | force encryption for the access tokens in cookies | false | PROXY_FORCE_ENCRYPTED_COOKIE
 |    --enable-logging                        | enable http logging of the requests | false | PROXY_ENABLE_LOGGING
-|    --enable-json-logging                   | switch on json logging rather than text | false | PROXY_ENABLE_JSON_LOGGING
+|    --enable-json-logging                   | switch on json logging rather than text | true | PROXY_ENABLE_JSON_LOGGING
 |    --enable-forwarding                     | enables the forwarding proxy mode, signing outbound request | false | PROXY_ENABLE_FORWARDING
 |    --enable-security-filter                | enables the security filter handler | false | PROXY_ENABLE_SECURITY_FILTER
 |    --enable-refresh-tokens                 | enables the handling of the refresh tokens | false | PROXY_ENABLE_REFRESH_TOKEN
@@ -65,7 +65,7 @@ weight: 2
 |    --content-security-policy value         | specify the content security policy | | PROXY_CONTENT_SECURITY_POLICY
 |    --localhost-metrics                     | enforces the metrics page can only been requested from 127.0.0.1 | false | PROXY_LOCALHOST_METRICS
 |    --enable-compression                    | enable gzip compression for response | false | PROXY_ENABLE_COMPRESSION
-|    --enable-pkce                           | enable pkce for auth code flow, only S256 code challenge supported | false | PROXY_ENABLE_PKCE
+|    --enable-pkce                           | enable pkce for auth code flow, only S256 code challenge supported | true | PROXY_ENABLE_PKCE
 |    --enable-idp-session-check              | during token validation it also checks if user session is still present, useful for multi app logout | true | PROXY_ENABLE_IDP_SESSION_CHECK
 |    --enable-uma                            | enable UMA authorization, please don't use in production as it is new feature, we would like to receive feedback first             | false | PROXY_ENABLE_UMA
 |	 --enable-opa                            | enable authorization with external Open policy agent  | false | PROXY_ENABLE_OPA
@@ -87,7 +87,7 @@ weight: 2
 |    --match-claims value                    | keypair values for matching access token claims e.g. aud=myapp, iss=http://example.* | |
 |    --add-claims value                      | extra claims from the token and inject into headers, e.g given_name -> X-Auth-Given-Name | |
 |    --enable-uma-method-scope               | enables passing request method as 'method:GET' scope to keycloak for authorization | false | PROXY_ENABLE_UMA_METHOD_SCOPE
-|    --tls-min-version                       | specify server minimal TLS version one of tlsv1.0,tlsv1.1,tlsv1.2,tlsv1.3 | | TLS_MIN_VERSION |
+|    --tls-min-version                       | specify server minimal TLS version one of tlsv1.2,tlsv1.3 | | TLS_MIN_VERSION |
 |    --tls-cert value                        | path to ths TLS certificate | | PROXY_TLS_CERTIFICATE
 |    --tls-private-key value                 | path to the private key for TLS | | PROXY_TLS_PRIVATE_KEY
 |    --tls-ca-certificate value              | path to the ca certificate used for signing requests | | PROXY_TLS_CA_CERTIFICATE
@@ -124,6 +124,7 @@ weight: 2
 |    --enabled-proxy-protocol                 | enable proxy protocol | false | PROXY_ENABLE_PROXY_PROTOCOL
 |    --max-idle-connections value             | max idle upstream / keycloak connections to keep alive, ready for reuse | 0 | PROXY_MAX_IDLE_CONNS
 |    --max-idle-connections-per-host value    | limits the number of idle connections maintained per host | 0 | PROXY_MAX_IDLE_CONNS_PER_HOST
+|    --server-grace-timeout value             | the server graceful period before shutdown | 10s | PROXY_SERVER_GRACE_TIMEOUT
 |    --server-read-timeout value              | the server read timeout on the http server | 10s | PROXY_SERVER_READ_TIMEOUT
 |    --server-write-timeout value             | the server write timeout on the http server | 10s | PROXY_SERVER_WRITE_TIMEOUT
 |    --server-idle-timeout value              | the server idle timeout on the http server | 2m0s | PROXY_SERVER_IDLE_TIMEOUT
@@ -137,6 +138,7 @@ weight: 2
 |    --forwarding-username value              | username to use when logging into the openid provider | | PROXY_FORWARDING_USERNAME
 |    --forwarding-password value              | password to use when logging into the openid provider | | PROXY_FORWARDING_PASSWORD
 |    --forwarding-domains value               | list of domains which should be signed; everything else is relayed unsigned | |
+|    --enable-loa                             | enable level of authentication            | false |
 |    --disable-all-logging                    | disables all logging to stdout and stderr | false | PROXY_DISABLE_ALL_LOGGING
 |    --help, -h                               | show help
 |    --version, -v                            | print the version
