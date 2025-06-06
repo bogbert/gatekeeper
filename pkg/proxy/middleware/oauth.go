@@ -108,7 +108,16 @@ func AuthenticationMiddleware(
 					return
 				}
 
-				if !strings.Contains(err.Error(), "token is expired") {
+				// Check if token is expired
+				if strings.Contains(err.Error(), "token is expired") {
+					// Add expiration info to logs only if token is expired
+					if extractErr == nil {
+						lLog = lLog.With(
+							zap.String("expired_on", userForLogging.ExpiresAt.String()),
+						)
+					}
+
+				} else {
 					lLog.Error(
 						apperrors.ErrAccTokenVerifyFailure.Error(),
 						zap.Error(err),
