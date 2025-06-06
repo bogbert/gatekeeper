@@ -72,6 +72,17 @@ func AuthenticationMiddleware(
 				return
 			}
 
+			// Attempt to extract identity for logging purposes ONLY
+			// This extraction happens BEFORE token verification - for logging only
+			userForLogging, extractErr := session.ExtractIdentity(token)
+			if extractErr == nil {
+				// If extraction succeeded, enrich the logger (even if token might be invalid)
+				lLog = lLog.With(
+					zap.String("user", userForLogging.Name),
+					zap.String("id", userForLogging.ID),
+				)
+			}
+
 			// IMPORTANT: For all calls with go-oidc library be aware
 			// that calls accept context parameter and you have to pass
 			// client from provider through this parameter, although
