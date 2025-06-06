@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package testsuite
+package testsuite_test
 
 import (
 	"encoding/json"
@@ -90,7 +90,7 @@ func TestWebSocket(t *testing.T) {
 	err = websocket.Message.Send(wsock, request)
 	require.NoError(t, err)
 
-	var responseData = make([]byte, 1024)
+	responseData := make([]byte, 1024)
 	err = websocket.Message.Receive(wsock, &responseData)
 	require.NoError(t, err)
 

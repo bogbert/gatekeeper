@@ -13,12 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package testsuite
+package testsuite_test
 
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -32,12 +31,8 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/go-resty/resty/v2"
-	"github.com/rs/cors"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -46,10 +41,11 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
-
-	"github.com/go-jose/go-jose/v4/jwt"
-
-	opaserver "github.com/open-policy-agent/opa/server"
+	opaserver "github.com/open-policy-agent/opa/v1/server"
+	"github.com/rs/cors"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestMetricsMiddleware(t *testing.T) {
@@ -73,7 +69,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		},
 		{
 			URI:           FakeAuthAllURL,
-			Redirects:     false,
+			Redirects:     true,
 			ExpectedProxy: true,
 			ExpectedCode:  http.StatusOK,
 		},
@@ -286,8 +282,7 @@ func TestAdminListener(t *testing.T) {
 
 				if certFile != "" {
 					fakeCertByte := []byte(fakeCert)
-					err := os.WriteFile(certFile, fakeCertByte, 0600)
-
+					err := os.WriteFile(certFile, fakeCertByte, 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
 					}
@@ -296,8 +291,7 @@ func TestAdminListener(t *testing.T) {
 
 				if privFile != "" {
 					fakeKeyByte := []byte(fakePrivateKey)
-					err := os.WriteFile(privFile, fakeKeyByte, 0600)
-
+					err := os.WriteFile(privFile, fakeKeyByte, 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing privateKey %s", err)
 					}
@@ -306,8 +300,7 @@ func TestAdminListener(t *testing.T) {
 
 				if caFile != "" {
 					fakeCAByte := []byte(fakeCA)
-					err := os.WriteFile(caFile, fakeCAByte, 0600)
-
+					err := os.WriteFile(caFile, fakeCAByte, 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
 					}
@@ -427,7 +420,9 @@ func TestPreserveURLEncoding(t *testing.T) {
 			Redirects:    false,
 		},
 		{ // See KEYCLOAK-10864
-			URI:                     "/administrativeMonitor/hudson.diagnosis.ReverseProxySetupMonitor/testForReverseProxySetup/https%3A%2F%2Flocalhost%3A6001%2Fmanage/",
+			//nolint:lll
+			URI: "/administrativeMonitor/hudson.diagnosis.ReverseProxySetupMonitor/testForReverseProxySetup/https%3A%2F%2Flocalhost%3A6001%2Fmanage/",
+			//nolint:lll
 			ExpectedContentContains: `"uri":"/administrativeMonitor/hudson.diagnosis.ReverseProxySetupMonitor/testForReverseProxySetup/https%3A%2F%2Flocalhost%3A6001%2Fmanage/"`,
 			HasToken:                true,
 			Roles:                   []string{"user"},
@@ -729,56 +724,256 @@ func TestStrangeAdminRequests(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestWhiteListedRequests(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
-	cfg.NoRedirects = true
 	cfg.Resources = []*authorization.Resource{
 		{
 			URL:     "/*",
 			Methods: utils.AllHTTPMethods,
-			Roles:   []string{FakeTestRole},
+			Roles:   []string{"default"}, // this role is in our fakeauth server
 		},
 		{
 			URL:         "/whitelist*",
 			WhiteListed: true,
 			Methods:     utils.AllHTTPMethods,
 		},
-	}
-	requests := []fakeRequest{
-		{ // check whitelisted is passed
-			URI:           "/whitelist",
-			ExpectedCode:  http.StatusOK,
-			ExpectedProxy: true,
-			Redirects:     false,
-		},
-		{ // check whitelisted is passed
-			URI:           "/whitelist/test",
-			ExpectedCode:  http.StatusOK,
-			ExpectedProxy: true,
-			Redirects:     false,
-		},
 		{
-			URI:          FakeTestURL,
-			HasToken:     true,
-			Roles:        []string{"nothing"},
-			ExpectedCode: http.StatusForbidden,
-			Redirects:    false,
-		},
-		{
-			URI:          "/",
-			ExpectedCode: http.StatusUnauthorized,
-			Redirects:    false,
-		},
-		{
-			URI:           "/",
-			HasToken:      true,
-			ExpectedProxy: true,
-			Roles:         []string{FakeTestRole},
-			ExpectedCode:  http.StatusOK,
-			Redirects:     false,
+			URL:             "/whitelistanon*",
+			WhiteListedAnon: true,
+			Methods:         utils.AllHTTPMethods,
+			Roles:           []string{"default"},
 		},
 	}
-	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, requests)
+
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
+		{
+			Name: "TestWhiteListingNoRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = true
+			},
+			ExecutionSettings: []fakeRequest{
+				{ // check whitelisted is passed
+					URI:           "/whitelist",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     false,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "whitelist")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{ // check whitelisted is passed
+					URI:           "/whitelist/test",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     false,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:          FakeTestURL,
+					HasToken:     true,
+					Roles:        []string{"nothing"},
+					ExpectedCode: http.StatusForbidden,
+					Redirects:    false,
+				},
+				{
+					URI:          "/",
+					ExpectedCode: http.StatusUnauthorized,
+					Redirects:    false,
+				},
+				{
+					URI:           "/",
+					HasToken:      true,
+					ExpectedProxy: true,
+					Roles:         []string{"default"},
+					ExpectedCode:  http.StatusOK,
+					Redirects:     false,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:           "/whitelistanon",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     false,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "whitelistanon")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:           "/whitelistanon/test",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     false,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:           "/whitelistanon",
+					HasToken:      true,
+					Roles:         []string{FakeAdminRole},
+					ExpectedCode:  http.StatusForbidden,
+					ExpectedProxy: false,
+					Redirects:     false,
+				},
+				{
+					URI:           "/whitelistanon",
+					HasToken:      true,
+					Roles:         []string{"default"},
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     false,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "whitelistanon")
+						assert.Contains(t, body, "method")
+					},
+				},
+			},
+		},
+		{
+			Name: "TestWhiteListingRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.EnableRefreshTokens = true
+				conf.EnableEncryptedToken = false // we don't have encrypt token functionality in our fake
+				conf.Verbose = true
+				conf.EnableLogging = true
+				conf.EncryptionKey = testEncryptionKey
+			},
+			ExecutionSettings: []fakeRequest{
+				{ // check whitelisted is passed
+					URI:           "/whitelist",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "whitelist")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{ // check whitelisted is passed
+					URI:           "/whitelist/test",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:            FakeTestURL,
+					HasToken:       true,
+					HasCookieToken: true,
+					Roles:          []string{"nothing"},
+					ExpectedCode:   http.StatusForbidden,
+					Redirects:      true,
+				},
+				{
+					URI:          "/",
+					ExpectedCode: http.StatusSeeOther,
+					Redirects:    true,
+				},
+				{
+					URI:           "/whitelistanon",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "whitelistanon")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:           "/whitelistanon/test",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:            "/whitelistanon",
+					HasToken:       true,
+					HasCookieToken: true,
+					OnResponse:     delay,
+					Roles:          []string{FakeAdminRole},
+					ExpectedCode:   http.StatusForbidden,
+					ExpectedProxy:  false,
+					Redirects:      true,
+				},
+				// this request will login and save cookies in our fakeproxy
+				// and next request will use already saved cookies
+				{
+					URI:           "/",
+					HasLogin:      true,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					Redirects:     true,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "method")
+					},
+					ExpectedProxyHeaders: map[string]string{
+						"X-Auth-Email":    defTestTokenClaims.Email,
+						"X-Auth-Username": defTestTokenClaims.PreferredUsername,
+					},
+				},
+				{
+					URI:           "/whitelistanon",
+					ExpectedCode:  http.StatusOK,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedProxyHeaders: map[string]string{
+						"X-Auth-Email":    defTestTokenClaims.Email,
+						"X-Auth-Username": defTestTokenClaims.PreferredUsername,
+					},
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "whitelistanon")
+						assert.Contains(t, body, "method")
+					},
+				},
+				{
+					URI:            "/whitelistanon",
+					HasToken:       true,
+					HasCookieToken: true,
+					ExpectedCode:   http.StatusOK,
+					ExpectedProxy:  true,
+					Redirects:      true,
+					ExpectedProxyHeaders: map[string]string{
+						"X-Auth-Email":    defTestTokenClaims.Email,
+						"X-Auth-Username": defTestTokenClaims.PreferredUsername,
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		cfgCopy := *cfg
+		c := &cfgCopy
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				testCase.ProxySettings(c)
+				p := newFakeProxy(c, &fakeAuthConfig{})
+				p.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
 }
 
 func TestRequireAnyRoles(t *testing.T) {
@@ -848,7 +1043,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					HasToken:      true,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -905,7 +1100,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					HasToken:      true,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -936,7 +1131,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					},
 					ExpectedCode: http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -995,7 +1190,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					HasToken:      true,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -1028,7 +1223,7 @@ func TestHeaderPermissionsMiddleware(t *testing.T) {
 					},
 					ExpectedCode: http.StatusOK,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -1282,7 +1477,7 @@ func TestRolePermissionsMiddleware(t *testing.T) {
 					HasToken:     true,
 					NotSigned:    true,
 					Roles:        []string{FakeTestRole},
-					ExpectedCode: http.StatusUnauthorized,
+					ExpectedCode: http.StatusForbidden,
 				},
 				{ // check with correct token, signed
 					URI:          "/admin/page",
@@ -1513,13 +1708,15 @@ func TestRefreshToken(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:                           FakeAuthAllURL,
-					HasLogin:                      true,
-					Redirects:                     true,
-					OnResponse:                    delay,
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieRefreshName: checkRefreshTokenEncryption},
+					URI:           FakeAuthAllURL,
+					HasLogin:      true,
+					Redirects:     true,
+					OnResponse:    delay,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieRefreshName: checkRefreshTokenEncryption,
+					},
 				},
 				{
 					URI:           FakeAuthAllURL,
@@ -1542,13 +1739,15 @@ func TestRefreshToken(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:                           FakeAuthAllURL,
-					HasLogin:                      true,
-					Redirects:                     true,
-					OnResponse:                    delay,
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieRefreshName: checkRefreshTokenEncryption},
+					URI:           FakeAuthAllURL,
+					HasLogin:      true,
+					Redirects:     true,
+					OnResponse:    delay,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieRefreshName: checkRefreshTokenEncryption,
+					},
 				},
 				{
 					URI:           FakeAuthAllURL,
@@ -1572,13 +1771,15 @@ func TestRefreshToken(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:                           FakeAuthAllURL,
-					HasLogin:                      true,
-					Redirects:                     true,
-					OnResponse:                    delay,
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieRefreshName: checkRefreshTokenEncryption},
+					URI:           FakeAuthAllURL,
+					HasLogin:      true,
+					Redirects:     true,
+					OnResponse:    delay,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieRefreshName: checkRefreshTokenEncryption,
+					},
 				},
 				{
 					URI:           FakeAuthAllURL,
@@ -1607,9 +1808,11 @@ func TestRefreshToken(t *testing.T) {
 					OnResponse: func(int, *resty.Request, *resty.Response) {
 						<-time.After(time.Duration(int64(3200)) * time.Millisecond)
 					},
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieRefreshName: checkRefreshTokenEncryption},
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieRefreshName: checkRefreshTokenEncryption,
+					},
 				},
 				{
 					URI:           FakeAuthAllURL,
@@ -1645,19 +1848,11 @@ func delay(no int, _ *resty.Request, _ *resty.Response) {
 func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) bool {
 	t.Helper()
 	rawToken, err := encryption.DecodeText(value, cfg.EncryptionKey)
-
 	if err != nil {
 		return false
 	}
 
-	token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
-
-	if err != nil {
-		return false
-	}
-
-	user, err := session.ExtractIdentity(token)
-
+	user, err := session.ExtractIdentity(rawToken)
 	if err != nil {
 		return false
 	}
@@ -1667,7 +1862,6 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 
 func checkRefreshTokenEncryption(_ *testing.T, cfg *config.Config, value string) bool {
 	rawToken, err := encryption.DecodeText(value, cfg.EncryptionKey)
-
 	if err != nil {
 		return false
 	}
@@ -1680,7 +1874,6 @@ func checkRefreshTokenEncryption(_ *testing.T, cfg *config.Config, value string)
 func TestAccessTokenEncryption(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	redisServer, err := miniredis.Run()
-
 	if err != nil {
 		t.Fatalf("Starting redis failed %s", err)
 	}
@@ -1710,17 +1903,21 @@ func TestAccessTokenEncryption(t *testing.T) {
 					OnResponse: func(int, *resty.Request, *resty.Response) {
 						<-time.After(time.Duration(int64(2500)) * time.Millisecond)
 					},
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: checkAccessTokenEncryption},
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieAccessName: checkAccessTokenEncryption,
+					},
 				},
 				{
-					URI:                      FakeAuthAllURL,
-					Redirects:                false,
-					ExpectedProxy:            true,
-					ExpectedCode:             http.StatusOK,
-					ExpectedCookies:          map[string]string{cfg.CookieAccessName: ""},
-					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: checkAccessTokenEncryption},
+					URI:             FakeAuthAllURL,
+					Redirects:       false,
+					ExpectedProxy:   true,
+					ExpectedCode:    http.StatusOK,
+					ExpectedCookies: map[string]string{cfg.CookieAccessName: ""},
+					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieAccessName: checkAccessTokenEncryption,
+					},
 				},
 			},
 		},
@@ -1741,17 +1938,21 @@ func TestAccessTokenEncryption(t *testing.T) {
 					OnResponse: func(int, *resty.Request, *resty.Response) {
 						<-time.After(time.Duration(int64(2500)) * time.Millisecond)
 					},
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: checkAccessTokenEncryption},
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieAccessName: checkAccessTokenEncryption,
+					},
 				},
 				{
-					URI:                      FakeAuthAllURL,
-					Redirects:                false,
-					ExpectedProxy:            true,
-					ExpectedCode:             http.StatusOK,
-					ExpectedCookies:          map[string]string{cfg.CookieAccessName: ""},
-					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: checkAccessTokenEncryption},
+					URI:             FakeAuthAllURL,
+					Redirects:       false,
+					ExpectedProxy:   true,
+					ExpectedCode:    http.StatusOK,
+					ExpectedCookies: map[string]string{cfg.CookieAccessName: ""},
+					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieAccessName: checkAccessTokenEncryption,
+					},
 				},
 			},
 		},
@@ -1773,17 +1974,21 @@ func TestAccessTokenEncryption(t *testing.T) {
 					OnResponse: func(int, *resty.Request, *resty.Response) {
 						<-time.After(time.Duration(int64(2500)) * time.Millisecond)
 					},
-					ExpectedProxy:                 true,
-					ExpectedCode:                  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: checkAccessTokenEncryption},
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieAccessName: checkAccessTokenEncryption,
+					},
 				},
 				{
-					URI:                      FakeAuthAllURL,
-					Redirects:                false,
-					ExpectedProxy:            true,
-					ExpectedCode:             http.StatusOK,
-					ExpectedCookies:          map[string]string{cfg.CookieAccessName: ""},
-					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{cfg.CookieAccessName: checkAccessTokenEncryption},
+					URI:             FakeAuthAllURL,
+					Redirects:       false,
+					ExpectedProxy:   true,
+					ExpectedCode:    http.StatusOK,
+					ExpectedCookies: map[string]string{cfg.CookieAccessName: ""},
+					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
+						cfg.CookieAccessName: checkAccessTokenEncryption,
+					},
 				},
 			},
 		},
@@ -1888,7 +2093,7 @@ func TestCustomHeadersHandlerNoProxyNoRedirects(t *testing.T) {
 				},
 				ExpectedCode: http.StatusOK,
 				ExpectedContent: func(body string, _ int) {
-					assert.Equal(t, "", body)
+					assert.Empty(t, body)
 				},
 			},
 		},
@@ -1916,7 +2121,7 @@ func TestCustomHeadersHandlerNoProxyNoRedirects(t *testing.T) {
 				},
 				ExpectedCode: http.StatusOK,
 				ExpectedContent: func(body string, _ int) {
-					assert.Equal(t, "", body)
+					assert.Empty(t, body)
 				},
 			},
 		},
@@ -2338,7 +2543,7 @@ func TestEnableUma(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2637,7 +2842,7 @@ func TestEnableOpa(t *testing.T) {
 
 			default allow := false
 
-			allow {
+			allow if {
 				input.method = "POST"
 				input.path = FakeTestURL
 				contains(input.body, "Whatever")
@@ -2662,7 +2867,7 @@ func TestEnableOpa(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2671,7 +2876,7 @@ func TestEnableOpa(t *testing.T) {
 
 			default allow := false
 
-			allow {
+			allow if {
 				input.method = "GETTT"
 				input.path = FakeTestURL
 			}
@@ -2695,7 +2900,7 @@ func TestEnableOpa(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2719,7 +2924,7 @@ func TestEnableOpa(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2743,7 +2948,7 @@ func TestEnableOpa(t *testing.T) {
 					Redirects:     true,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2815,7 +3020,7 @@ func TestEnableOpa(t *testing.T) {
 
 			default allow := false
 
-			allow {
+			allow if {
 				input.method = "GET"
 				input.path = FakeTestURL
 			}
@@ -2831,7 +3036,7 @@ func TestEnableOpa(t *testing.T) {
 				cfg := newFakeKeycloakConfig()
 				testCase.ProxySettings(cfg)
 
-				ctx := context.Background()
+				ctx := t.Context()
 				authzPolicy := testCase.AuthzPolicy
 				opaAddress := ""
 				var server *opaserver.Server
@@ -2848,7 +3053,6 @@ func TestEnableOpa(t *testing.T) {
 					"v1/data/authz/allow",
 				)
 				authzURL, err := url.ParseRequestURI(authzURI)
-
 				if err != nil {
 					t.Fatalf("problem parsing authzURL")
 				}

@@ -1,8 +1,7 @@
-package authorization
+package authorization_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	opaserver "github.com/open-policy-agent/opa/server"
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
+	opaserver "github.com/open-policy-agent/opa/v1/server"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
 )
@@ -27,7 +27,7 @@ func TestExternalOpa(t *testing.T) {
 		FakeRequest    func() (*http.Request, error)
 		AuthzPolicy    string
 		StartOpa       bool
-		ExpectedResult AuthzDecision
+		ExpectedResult authorization.AuthzDecision
 		ExptectError   bool
 	}{
 		{
@@ -58,12 +58,12 @@ func TestExternalOpa(t *testing.T) {
 			default allow := false
 
 			body := json.unmarshal(input.body)
-			allow {
+			allow if {
 				body.name = "Test"
 			}
 			`,
 			StartOpa:       true,
-			ExpectedResult: AllowedAuthz,
+			ExpectedResult: authorization.AllowedAuthz,
 		},
 		{
 			Name: "NonAuthorizedRequest",
@@ -93,12 +93,12 @@ func TestExternalOpa(t *testing.T) {
 			default allow := false
 
 			body := json.unmarshal(input.body)
-			allow {
+			allow if {
 				body.name = "Tester"
 			}
 			`,
 			StartOpa:       true,
-			ExpectedResult: DeniedAuthz,
+			ExpectedResult: authorization.DeniedAuthz,
 		},
 		{
 			Name: "OpaPolicyMissing",
@@ -124,7 +124,7 @@ func TestExternalOpa(t *testing.T) {
 			},
 			AuthzPolicy:    ``,
 			StartOpa:       true,
-			ExpectedResult: DeniedAuthz,
+			ExpectedResult: authorization.DeniedAuthz,
 			ExptectError:   true,
 		},
 		{
@@ -151,7 +151,7 @@ func TestExternalOpa(t *testing.T) {
 			},
 			AuthzPolicy:    ``,
 			StartOpa:       false,
-			ExpectedResult: DeniedAuthz,
+			ExpectedResult: authorization.DeniedAuthz,
 			ExptectError:   true,
 		},
 		{
@@ -182,12 +182,12 @@ func TestExternalOpa(t *testing.T) {
 			default allow := false
 
 			body := yaml.unmarshal(input.body)
-			allow {
+			allow if {
 				body.name = "Test"
 			}
 			`,
 			StartOpa:       true,
-			ExpectedResult: AllowedAuthz,
+			ExpectedResult: authorization.AllowedAuthz,
 		},
 		{
 			Name: "AuthorizedRequestMatchingHeaders",
@@ -218,13 +218,13 @@ func TestExternalOpa(t *testing.T) {
 			default allow := false
 		
 			body := yaml.unmarshal(input.body)
-			allow {
+			allow if {
 				body.name = "Test"
 				input.headers["X-Custom"][0] = "TESTVALUE"
 			}
 			`,
 			StartOpa:       true,
-			ExpectedResult: AllowedAuthz,
+			ExpectedResult: authorization.AllowedAuthz,
 		},
 	}
 
@@ -232,13 +232,13 @@ func TestExternalOpa(t *testing.T) {
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
-				ctx := context.Background()
+				ctx := t.Context()
 				authzPolicy := testCase.AuthzPolicy
 				opaAddress := ""
 				var server *opaserver.Server
 
 				if testCase.StartOpa {
-					server = StartOpaServer(ctx, t, authzPolicy)
+					server = authorization.StartOpaServer(ctx, t, authzPolicy)
 					addrs := server.Addrs()
 					opaAddress = addrs[0]
 				}
@@ -249,18 +249,16 @@ func TestExternalOpa(t *testing.T) {
 					"v1/data/authz/allow",
 				)
 				authzURL, err := url.ParseRequestURI(authzURI)
-
 				if err != nil {
 					t.Fatalf("problem parsing authzURL")
 				}
 
 				req, err := testCase.FakeRequest()
-
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				opaAuthzProvider := NewOpaAuthorizationProvider(
+				opaAuthzProvider := authorization.NewOpaAuthorizationProvider(
 					10*time.Second,
 					*authzURL,
 					req,
@@ -276,7 +274,6 @@ func TestExternalOpa(t *testing.T) {
 
 				if testCase.StartOpa {
 					err = server.Shutdown(ctx)
-
 					if err != nil {
 						t.Fatal(err)
 					}

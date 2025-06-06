@@ -127,7 +127,6 @@ func AdmissionMiddleware(
 			user := scope.Identity
 			lLog := scope.Logger.With(
 				zap.String("access", "denied"),
-				zap.String("username", user.Name),
 				zap.String("userID", user.ID),
 				zap.String("resource", resource.URL),
 			)

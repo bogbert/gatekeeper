@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package testsuite
+package testsuite_test
 
 import (
 	"encoding/json"
@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -171,23 +170,6 @@ func TestLoginHandler(t *testing.T) {
 						err := json.Unmarshal([]byte(body), &resp)
 						require.NoError(t, err)
 						assert.Equal(t, "Bearer", resp.TokenType)
-					},
-					ExpectedCode: http.StatusOK,
-				},
-			},
-		},
-		{
-			Name: "TestLoginWithSkipTokenVerification",
-			ProxySettings: func(c *config.Config) {
-				c.SkipTokenVerification = true
-			},
-			ExecutionSettings: []fakeRequest{
-				{
-					URI:    uri,
-					Method: http.MethodPost,
-					FormValues: map[string]string{
-						"password": "test",
-						"username": "test",
 					},
 					ExpectedCode: http.StatusOK,
 				},
@@ -461,13 +443,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: func(t *testing.T, _ *config.Config, rawToken string) bool {
 							t.Helper()
-							token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
-							if err != nil {
-								return false
-							}
-
-							user, err := session.ExtractIdentity(token)
-
+							user, err := session.ExtractIdentity(rawToken)
 							if err != nil {
 								return false
 							}
@@ -513,13 +489,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: func(t *testing.T, _ *config.Config, rawToken string) bool {
 							t.Helper()
-							token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
-							if err != nil {
-								return false
-							}
-
-							user, err := session.ExtractIdentity(token)
-
+							user, err := session.ExtractIdentity(rawToken)
 							if err != nil {
 								return false
 							}
@@ -617,13 +587,13 @@ func TestLogoutHandlerBadToken(t *testing.T) {
 			URI:            logoutURL,
 			HasCookieToken: true,
 			RawToken:       "this.is.a.bad.token",
-			ExpectedCode:   http.StatusUnauthorized,
+			ExpectedCode:   http.StatusForbidden,
 			Redirects:      false,
 		},
 		{
 			URI:          logoutURL,
 			RawToken:     "this.is.a.bad.token",
-			ExpectedCode: http.StatusUnauthorized,
+			ExpectedCode: http.StatusForbidden,
 			Redirects:    false,
 		},
 	}
@@ -654,7 +624,7 @@ func TestLogoutHandlerGood(t *testing.T) {
 			ProxySettings: func(_ *config.Config) {},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:              utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL) + "?redirect=http://example.com",
+					URI:              logoutURL + "?redirect=http://example.com",
 					HasToken:         true,
 					ExpectedCode:     http.StatusSeeOther,
 					ExpectedLocation: "http://example.com",
@@ -668,7 +638,7 @@ func TestLogoutHandlerGood(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:              utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL),
+					URI:              logoutURL,
 					HasToken:         true,
 					ExpectedCode:     http.StatusSeeOther,
 					ExpectedLocation: "http://127.0.0.1",
@@ -682,7 +652,7 @@ func TestLogoutHandlerGood(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:          utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL) + "?redirect=",
+					URI:          logoutURL + "?redirect=",
 					HasToken:     true,
 					ExpectedCode: http.StatusSeeOther,
 				},
@@ -810,7 +780,7 @@ func TestTokenHandler(t *testing.T) {
 		{
 			URI:          uri,
 			RawToken:     "niothing",
-			ExpectedCode: http.StatusUnauthorized,
+			ExpectedCode: http.StatusForbidden,
 			Redirects:    false,
 		},
 		{
@@ -915,18 +885,6 @@ func TestServiceRedirect(t *testing.T) {
 			},
 		)
 	}
-}
-
-func TestAuthorizationURLWithSkipToken(t *testing.T) {
-	cfg := newFakeKeycloakConfig()
-	cfg.SkipTokenVerification = true
-	uri := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.AuthorizationURL)
-	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, []fakeRequest{
-		{
-			URI:          uri,
-			ExpectedCode: http.StatusNotAcceptable,
-		},
-	})
 }
 
 func TestAuthorizationURL(t *testing.T) {

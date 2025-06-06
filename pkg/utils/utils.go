@@ -41,6 +41,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+//nolint:gochecknoglobals
 var (
 	AllHTTPMethods = []string{
 		http.MethodDelete,
@@ -52,9 +53,6 @@ var (
 		http.MethodPut,
 		http.MethodTrace,
 	}
-)
-
-var (
 	symbolsFilter = regexp.MustCompilePOSIX("[_$><\\[\\].,\\+-/'%^&*()!\\\\]+")
 )
 
@@ -170,7 +168,7 @@ func TryDialEndpoint(location *url.URL) (net.Conn, error) {
 	default:
 		return tls.Dial("tcp", dialAddress, &tls.Config{
 			Rand: cryptorand.Reader,
-			//nolint:gas
+			//nolint:gas,gosec
 			InsecureSkipVerify: true,
 		})
 	}
@@ -190,7 +188,6 @@ func TransferBytes(src io.Reader, dest io.Writer, wg *sync.WaitGroup) (int64, er
 func TryUpdateConnection(req *http.Request, writer http.ResponseWriter, endpoint *url.URL) error {
 	// step: dial the endpoint
 	server, err := TryDialEndpoint(endpoint)
-
 	if err != nil {
 		return err
 	}
@@ -206,7 +203,6 @@ func TryUpdateConnection(req *http.Request, writer http.ResponseWriter, endpoint
 
 	// @step: get the client connection object
 	client, _, err := hijacker.Hijack()
-
 	if err != nil {
 		return err
 	}

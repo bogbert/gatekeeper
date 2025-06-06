@@ -9,17 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/purell"
+	"github.com/go-chi/chi/v5/middleware"
 	uuid "github.com/gofrs/uuid"
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
-
-	"github.com/PuerkitoBio/purell"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"go.uber.org/zap"
 )
 
@@ -336,7 +335,8 @@ func ProxyMiddleware(
 				req.Header.Set(k, v)
 			}
 
-			// @note: by default goproxy only provides a forwarding proxy, thus all requests have to be absolute and we must update the host headers
+			// @note: by default goproxy only provides a forwarding proxy,
+			// thus all requests have to be absolute and we must update the host headers
 			req.URL.Host = endpoint.Host
 			req.URL.Scheme = endpoint.Scheme
 			// Restore the unprocessed original path, so that we pass upstream exactly what we received

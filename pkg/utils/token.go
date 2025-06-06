@@ -178,7 +178,6 @@ func CheckClaim(
 	errFields := []zapcore.Field{
 		zap.String("claim", claimName),
 		zap.String("access", "denied"),
-		zap.String("username", user.Name),
 		zap.String("userID", user.ID),
 		zap.String("resource", resourceURL),
 	}

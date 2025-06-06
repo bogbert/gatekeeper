@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package testsuite
+package testsuite_test
 
 import (
 	"net/http"
@@ -65,20 +65,6 @@ func TestRedirectToAuthorizationWith303Enabled(t *testing.T) {
 		},
 	}
 	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, requests)
-}
-
-func TestRedirectToAuthorizationSkipToken(t *testing.T) {
-	requests := []fakeRequest{
-		{
-			URI:          FakeAdminURL,
-			ExpectedCode: http.StatusUnauthorized,
-			Redirects:    false,
-		},
-	}
-	c := newFakeKeycloakConfig()
-	c.NoRedirects = true
-	c.SkipTokenVerification = true
-	newFakeProxy(c, &fakeAuthConfig{}).RunTests(t, requests)
 }
 
 func assertAlmostEquals(t *testing.T, expected time.Duration, actual time.Duration) {

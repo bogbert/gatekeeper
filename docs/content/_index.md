@@ -22,7 +22,7 @@ You can view all settings also in this table [Settings](https://gogatekeeper.git
 
 ## Requirements
 
-  - Go 1.23 or higher
+  - Go 1.24 or higher
 
 ## Example, simple setup architecture
 
@@ -39,6 +39,8 @@ options. Here is a list of options.
 ``` yaml
 # is the URL for retrieve the OpenID configuration
 discovery-url: <DISCOVERY URL>
+# path to your CA certificate/s in PEM format
+openid-provider-ca: /etc/ssl/ca.pem
 # Indicates we should deny by default all requests and explicitly specify what is permitted, default true
 # this is equivalent of --resource=/*|methods
 enable-default-deny: true
@@ -61,6 +63,7 @@ enable-refresh-tokens: true
 forbidden-page: templates/forbidden.html.tmpl
 error-page: templates/error.html.tmpl
 sign-in-page: sign_in.html.tmpl
+register-page: register.html.tmpl
 # the location of a certificate you wish the proxy to use for TLS support
 tls-cert:
 # the location of a private key for TLS
@@ -132,6 +135,8 @@ client-secret: <CLIENT_SECRET> # require for access_type: confidential
 # Note the redirection-url is optional, it will default to the the URL scheme and host, 
 # only in case of forward auth it will use X-Forwarded-Proto / X-Forwarded-Host, please see forward-auth section
 discovery-url: https://keycloak.example.com/realms/<REALM_NAME>
+# path to your CA certificate/s in PEM format
+openid-provider-ca: /etc/ssl/ca.pem
 # Indicates we should deny by default all requests and explicitly specify what is permitted, default true,
 # you cannot specify enable-default-deny:true together with defining resource=uri=/*
 enable-default-deny: true
@@ -183,6 +188,7 @@ command line options, such as in this example.
 ``` bash
 bin/gatekeeper \
     --discovery-url=https://keycloak.example.com/realms/<REALM_NAME> \
+    --openid-provider-ca=/etc/ssl/ca.pem \
     --client-id=<CLIENT_ID> \
     --client-secret=<SECRET> \
     --listen=127.0.0.1:3000 \ # unix sockets format unix://path
@@ -232,7 +238,7 @@ Frontend server-side applications can be protected by Authorization Code Flow (a
 steps take place. For protecting APIs you can use Client Credentials Grant to avoid redirections steps
 involved in authorization code flow you have to use `--no-redirects=true`.
 
-From version 3.1.0 gatekeeper also supports both Authorization Code Flow and "API" mode to be configured
+From version 3.2.1 gatekeeper also supports both Authorization Code Flow and "API" mode to be configured
 on same gatekeeper, example:
 
 ```yaml
@@ -514,7 +520,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:3.1.0
+  image: quay.io/gogatekeeper/gatekeeper:3.4.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -541,7 +547,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:3.1.0
+  image: quay.io/gogatekeeper/gatekeeper:3.4.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -1024,6 +1030,12 @@ Or on the command line
   --resources "uri=/admin*|roles=admin,superuser|methods=POST,DELETE"
 ```
 
+From version 3.4.0 there is new option in resources: `white-listed-anon`.
+This option enables to allow anonymous access on resource (means no access token/bearer token present in request)
+and also allows in same time authenticated access on same resource (means for requests containing token it will validate it and request will go through whole authentication/authorization stack).
+This feature might be usefull e.g. in case you have public and private pages, but you would
+like to return private pages list only in case request was authenticated.
+
 ## PKCE (Proof Key for Code Exchange)
 
 Gatekeeper supports PKCE with S256 code challenge method. It stores code verifier in cookie.
@@ -1147,6 +1159,8 @@ UNIX socket, `--upstream-url unix://path/to/the/file.sock`.
 
   - **/oauth/authorize** is authentication endpoint which will generate
     the OpenID redirect to the provider
+  
+  - **/oauth/register** is endpoint which redirects to registration page of provider, if enabled
 
   - **/oauth/callback** is provider OpenID callback endpoint
 

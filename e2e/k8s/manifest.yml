@@ -1,4 +1,34 @@
 apiVersion: v1
+kind: Secret
+metadata:
+  name: tls
+type: kubernetes.io/tls
+data:
+  tls.crt: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNpVENDQWk2Z0F3SUJBZ0lVT2djYmdRVkNG
+    T3EzakVIRno0MFBzYytpWUVNd0NnWUlLb1pJemowRUF3SXcKZURFTE1Ba0dBMVVFQmhNQ1ZWTXhF
+    ekFSQmdOVkJBZ1RDa05oYkdsbWIzSnVhV0V4RmpBVUJnTlZCQWNURFZOaApiaUJHY21GdVkybHpZ
+    Mjh4SHpBZEJnTlZCQW9URmtsdWRHVnlibVYwSUZkcFpHZGxkSE1zSUVsdVl5NHhEREFLCkJnTlZC
+    QXNUQTFkWFZ6RU5NQXNHQTFVRUF4TUVkR1Z6ZERBZUZ3MHlOVEExTVRFeU1ERXpNREJhRncwek5U
+    QTEKTURreU1ERXpNREJhTUZVeEN6QUpCZ05WQkFZVEFsVlRNUTR3REFZRFZRUUlFd1ZVWlhoaGN6
+    RVBNQTBHQTFVRQpCeE1HUkdGc2JHRnpNUmN3RlFZRFZRUUtFdzVOZVNCRFpYSjBhV1pwWTJGMFpU
+    RU1NQW9HQTFVRUN4TURWMWRYCk1Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERBUWNEUWdBRXJF
+    cXVCa2ZKdzUvTVBkWWI3ZWZUQjZEQUZrV28KSDY1aDNySnlLMXdJMTVxTGhJY0hEMHgrc08zY29q
+    enU0Q0hyT0ZoYVpJYXdhTWtsYzJnYjVEaWxRNk9CdURDQgp0VEFPQmdOVkhROEJBZjhFQkFNQ0Jh
+    QXdFd1lEVlIwbEJBd3dDZ1lJS3dZQkJRVUhBd0V3REFZRFZSMFRBUUgvCkJBSXdBREFkQmdOVkhR
+    NEVGZ1FVVW15bGRtK21GNWFzMjYyUGNicFNTSEZnd0Nrd0h3WURWUjBqQkJnd0ZvQVUKSWs5NmNJ
+    YXRGU0FaM1BXWEZ1a1NscCs5N2Rjd1FBWURWUjBSQkRrd040SUpiRzlqWVd4b2IzTjBod1IvQUFB
+    QgpoaEZvZEhSd2N6b3ZMMnh2WTJGc2FHOXpkSVlSYUhSMGNITTZMeTh4TWpjdU1DNHdMakV3Q2dZ
+    SUtvWkl6ajBFCkF3SURTUUF3UmdJaEFOcU91T3ZYaXBZeDkzTHVrcnk1blUvOUdvRmNKc1cweUZ1
+    NGd4SDBFcTcyQWlFQTZsZkwKUDdMSWFOc3NCeUo3clBtcm9Nd01iZ3N3LzB3dzE2NUhZUGpRcHI4
+    PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  tls.key: |
+    LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUtuVlYrRGlaa0hTMjdtd01w
+    R2FTME9uN1FSTFpONkRGaHZ3b2xkSUQ1NnVvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFckVxdUJr
+    Zkp3NS9NUGRZYjdlZlRCNkRBRmtXb0g2NWgzckp5SzF3STE1cUxoSWNIRDB4KwpzTzNjb2p6dTRD
+    SHJPRmhhWklhd2FNa2xjMmdiNURpbFF3PT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: keycloak-config
@@ -31,7 +61,7 @@ data:
       "actionTokenGeneratedByUserLifespan": 300,
       "enabled": true,
       "sslRequired": "external",
-      "registrationAllowed": false,
+      "registrationAllowed": true,
       "registrationEmailAsUsername": false,
       "rememberMe": false,
       "verifyEmail": false,
@@ -2841,20 +2871,23 @@ spec:
     spec:
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:24.0.2
+          image: quay.io/keycloak/keycloak:26.2.3
           command: 
             - /opt/keycloak/bin/kc.sh
             - start-dev
             - --features=preview
             - --import-realm
+            - --proxy-headers=xforwarded
+            # - --https-certificate-file=/etc/ssl/tls.crt
+            # - --https-certificate-key-file=/etc/ssl/tls.key
           env:
             - name: KEYCLOAK_USER
               value: admin
             - name: KEYCLOAK_PASSWORD
               value: admin
-            - name: KEYCLOAK_ADMIN
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
               value: admin
-            - name: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               value: admin
             - name: JAVA_OPTS
               value: >-
@@ -2886,11 +2919,10 @@ spec:
               port: keycloak
             failureThreshold: 30
             periodSeconds: 10
-          # volumeMounts:
-          #   - name: ca
-          #     mountPath: "/etc/ssl/certs"
-          #     readOnly: true
           volumeMounts:
+            # - name: tls
+            #   mountPath: "/etc/ssl"
+            #   readOnly: true
             - name: keycloak-config
               mountPath: /opt/keycloak/data/import/test.json
               subPath: test.json
@@ -2898,12 +2930,9 @@ spec:
         - name: keycloak-config
           configMap:
             name: keycloak-config
-        # - name: ca
+        # - name: tls
         #   secret:
-        #     secretName: ca-secret
-        #     items:
-        #       - key: caca
-        #         path: ca-certificates.crt
+        #     secretName: tls
 ---
 apiVersion: v1
 kind: Service
@@ -2940,10 +2969,15 @@ kind: Ingress
 metadata:
   name: nginx
   annotations:
-    ingress.kubernetes.io/ssl-redirect: "false"
+    ingress.kubernetes.io/ssl-redirect: "true"
 spec:
+  tls:
+  - hosts:
+      - localhost
+    secretName: tls
   rules:
-  - http:
+  - host: localhost
+    http:
       paths:
       - path: /
         pathType: Prefix
@@ -2959,3 +2993,14 @@ spec:
             name: mock
             port:
               number: 4010
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    additionalArguments:
+      - "--entryPoints.web.proxyProtocol.insecure"
+      - "--entryPoints.web.forwardedHeaders.insecure"

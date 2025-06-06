@@ -24,7 +24,7 @@ jobs:
           curl -Lo $RUNNER_TEMP/sbom-tool https://github.com/microsoft/sbom-tool/releases/download/v1.2.0/sbom-tool-linux-x64
           chmod +x $RUNNER_TEMP/sbom-tool
           $RUNNER_TEMP/sbom-tool generate -b . -bc . -pn $ -pv 1.0.0 -ps "Pavol Ipoth" -nsb https://github.com/gogatekeeper -V Verbose
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: sbom
           path: _manifest/spdx_2.2
@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.2"
+          go-version: "1.24.0"
       # Checkout the repository
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,11 +54,11 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
       - name: "Create k3d Cluster for E2E testing"
-        uses: AbsaOSS/k3d-action@v1.5.0
+        uses: AbsaOSS/k3d-action@v2.4.0
         with:
           cluster-name: "testcluster"
           args: >-
-            -p "8081:80@loadbalancer"
+            -p "8443:443@loadbalancer"
       - name: "Run Tests"
         run: |
           k3d kubeconfig merge testcluster --kubeconfig-switch-context

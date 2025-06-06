@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
-	"github.com/open-policy-agent/opa/plugins"
-	opaserver "github.com/open-policy-agent/opa/server"
-	opastorage "github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	opaserver "github.com/open-policy-agent/opa/v1/server"
+	opastorage "github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
 )
 
 type OpaInput struct {
@@ -145,7 +145,6 @@ func StartOpaServer(
 		WithStore(store)
 
 	mgr, err := plugins.New([]byte{}, "test", store)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +157,6 @@ func StartOpaServer(
 
 	txn := opastorage.NewTransactionOrDie(ctx, store, opastorage.WriteParams)
 	err = store.UpsertPolicy(ctx, txn, "test", []byte(authzPolicy))
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +166,6 @@ func StartOpaServer(
 	}
 
 	server, err = server.Init(ctx)
-
 	if err != nil {
 		t.Fatal(err)
 	}

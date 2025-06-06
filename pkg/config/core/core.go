@@ -34,13 +34,13 @@ type CommonConfig struct{}
 
 func WriteFakeConfigFile(t *testing.T, content string) *os.File {
 	t.Helper()
-	file, err := os.CreateTemp("", "node_label_file")
+	file, err := os.CreateTemp(t.TempDir(), "node_label_file")
 	if err != nil {
 		t.Fatalf("unexpected error creating node_label_file: %v", err)
 	}
 	file.Close()
 
-	var perms fs.FileMode = 0600
+	var perms fs.FileMode = 0o600
 	if err := os.WriteFile(file.Name(), []byte(content), perms); err != nil {
 		t.Fatalf("unexpected error writing node label file: %v", err)
 	}

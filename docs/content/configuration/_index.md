@@ -18,6 +18,7 @@ weight: 2
 |    --post-login-redirect-path value        | post-login-redirect-path" usage:"path to which client is redirected after successful login, in case user access / | | PROXY_POST_LOGIN_REDIRECT_PATH
 |    --revocation-url value                  | url for the revocation endpoint to revoke refresh token | | PROXY_REVOCATION_URL
 |    --skip-openid-provider-tls-verify       | skip the verification of any TLS communication with the openid provider | false | PROXY_SKIP_OPENID_PROVIDER_TLSVERIFY
+|    --openid-provider-ca value              | path to the ca certificate for IDP | | PROXY_OPENID_PROVIDER_CA
 |    --openid-provider-proxy value           | proxy for communication with the openid provider | | PROXY_OPENID_PROVIDER_PROXY
 |    --openid-provider-timeout value         | timeout for openid configuration on .well-known/openid-configuration | 30s | PROXY_OPENID_PROVIDER_TIMEOUT
 |    --openid-provider-retry-count value     | number of retries for retrieving openid configuration | 3 | PROXY_OPENID_PROVIDER_RETRY_COUNT
@@ -53,7 +54,8 @@ weight: 2
 |    --enable-refresh-tokens                 | enables the handling of the refresh tokens | false | PROXY_ENABLE_REFRESH_TOKEN
 |    --enable-session-cookies                | access and refresh tokens are session only i.e. removed browser close | true | PROXY_ENABLE_SESSION_COOKIES
 |    --enable-login-handler                  | enables the handling of the refresh tokens | false | PROXY_ENABLE_LOGIN_HANDLER
-|    --enable-token-header                   | enables the token authentication header X-Auth-Token to upstream | true | PROXY_ENABLE_TOKEN_HEADER
+|   --enable-register-handler               | enables the handling of registration       | false | PROXY_ENABLE_REGISTER_HANDLER
+|    --enable-token-header                   | enables the token authentication header X-Auth-Token to upstream | true |PROXY_ENABLE_TOKEN_HEADER
 |    --enable-authorization-header           | adds the authorization header to the proxy request | true | PROXY_ENABLE_AUTHORIZATION_HEADER
 |    --enable-authorization-cookies          | adds the authorization cookies to the uptream proxy request | true | PROXY_ENABLE_AUTHORIZATION_COOKIES
 |    --enable-https-redirection              | enable the http to https redirection on the http service | false | PROXY_ENABLE_HTTPS_REDIRECT
@@ -75,6 +77,7 @@ weight: 2
 |    --pat-retry-interval                    | interval between retries to get PAT                   |    2s | PROXY_PAT_RETRY_INTERVAL
 |    --access-token-duration value           | fallback cookie duration for the access token when using refresh tokens | 720h0m0s | PROXY_ACCESS_TOKEN_DURATION
 |    --cookie-domain value                   | domain the access cookie is available to, defaults host header | | PROXY_COOKIE_DOMAIN
+|    --cookie-path value                     | path to which cookie is available | | PROXY_COOKIE_PATH
 |    --cookie-access-name value              | name of the cookie use to hold the access token | kc-access | PROXY_COOKIE_ACCESS_NAME
 |    --cookie-refresh-name value             | name of the cookie used to hold the encrypted refresh token | kc-state | PROXY_COOKIE_REFRESH_NAME
 |    --cookie-oauth-state-name value         | name of the cookie used to hold the Oauth request state | OAuth_Token_Request_State | COOKIE_OAUTH_STATE_NAME
@@ -93,7 +96,7 @@ weight: 2
 |    --tls-ca-certificate value              | path to the ca certificate used for signing requests | | PROXY_TLS_CA_CERTIFICATE
 |    --tls-ca-key value                      | path the ca private key, used by the forward signing proxy | | PROXY_TLS_CA_PRIVATE_KEY
 |    --tls-client-certificate value          | path to the client certificate for outbound connections in reverse and forwarding proxy modes | | PROXY_TLS_CLIENT_CERTIFICATE
-|    --skip-upstream-tls-verify              | skip the verification of any upstream TLS | true | PROXY_SKIP_UPSTREAM_TLS_VERIFY
+|    --skip-upstream-tls-verify              | skip the verification of any upstream TLS | false | PROXY_SKIP_UPSTREAM_TLS_VERIFY
 |    --tls-admin-cert value                  | path to ths TLS certificate | | PROXY_TLS_ADMIN_CERTIFICATE |
 |    --tls-admin-private-key value           | path to the private key for TLS | | PROXY_TLS_ADMIN_PRIVATE_KEY |
 |    --tls-admin-ca-certificate value        | path to the ca certificate used for signing requests | | PROXY_TLS_ADMIN_CA_CERTIFICATE |
@@ -131,6 +134,7 @@ weight: 2
 |    --use-letsencrypt                        | use letsencrypt for certificates | false | PROXY_USE_LETS_ENCRYPT
 |    --letsencrypt-cache-dir value            | path where cached letsencrypt certificates are stored | ./cache/ | PROXY_LETS_ENCRYPT_CACHE_DIR
 |    --sign-in-page value                     | path to custom template displayed for signin | | PROXY_SIGN_IN_PAGE
+|    --register-page value                    | path to custom template displayed for registration | | PROXY_REGISTER_PAGE
 |    --forbidden-page value                   | path to custom template used for access forbidden | | PROXY_FORBIDDEN_PAGE
 |    --error-page value                       | path to custom template displayed for http.StatusBadRequest | | PROXY_ERROR_PAGE
 |    --tags value                             | keypairs passed to the templates at render,e.g title=Page | |

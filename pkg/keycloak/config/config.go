@@ -37,7 +37,7 @@ import (
 
 var _ core.Configs = &Config{}
 
-//nolint:tagalign
+//nolint:tagalign,lll
 type Config struct {
 	CommonConfig                    core.CommonConfig
 	Scopes                          []string                  `json:"scopes" usage:"list of scopes requested when authenticating the user" yaml:"scopes"`
@@ -74,6 +74,7 @@ type Config struct {
 	ContentSecurityPolicy           string                    `env:"CONTENT_SECURITY_POLICY" json:"content-security-policy" usage:"specify the content security policy" yaml:"content-security-policy"`
 	OpaAuthzURI                     string                    `env:"OPA_AUTHZ_URI"            json:"opa-authz-uri"            usage:"OPA endpoint address with path"                                                                      yaml:"opa-authz-uri"`
 	CookieDomain                    string                    `env:"COOKIE_DOMAIN" json:"cookie-domain" usage:"domain the access cookie is available to, defaults host header" yaml:"cookie-domain"`
+	CookiePath                      string                    `env:"COOKIE_PATH" json:"cookie-path" usage:"path for which cookie is valid" yaml:"cookie-path"`
 	CookieAccessName                string                    `env:"COOKIE_ACCESS_NAME" json:"cookie-access-name" usage:"name of the cookie used to hold the access token" yaml:"cookie-access-name"`
 	CookieIDTokenName               string                    `env:"COOKIE_ID_TOKEN_NAME" json:"cookie-id-token-name" usage:"name of the cookie used to hold id token" yaml:"cookie-id-token-name"`
 	CookieRefreshName               string                    `env:"COOKIE_REFRESH_NAME" json:"cookie-refresh-name" usage:"name of the cookie used to hold the encrypted refresh token" yaml:"cookie-refresh-name"`
@@ -96,12 +97,14 @@ type Config struct {
 	EncryptionKey                   string                    `env:"ENCRYPTION_KEY" json:"encryption-key" usage:"encryption key used to encryption the session state" yaml:"encryption-key"`
 	LetsEncryptCacheDir             string                    `env:"LETS_ENCRYPT_CACHE_DIR" json:"letsencrypt-cache-dir" usage:"path where cached letsencrypt certificates are stored" yaml:"letsencrypt-cache-dir"`
 	SignInPage                      string                    `env:"SIGN_IN_PAGE" json:"sign-in-page" usage:"path to custom template displayed for signin" yaml:"sign-in-page"`
+	RegisterPage                    string                    `env:"REGISTER_PAGE" json:"register-page" usage:"path to custom template displayed for registration" yaml:"register-page"`
 	ForbiddenPage                   string                    `env:"FORBIDDEN_PAGE" json:"forbidden-page" usage:"path to custom template used for access forbidden" yaml:"forbidden-page"`
 	ErrorPage                       string                    `env:"ERROR_PAGE" json:"error-page" usage:"path to custom template displayed for http.StatusBadRequest" yaml:"error-page"`
 	ForwardingGrantType             string                    `env:"FORWARDING_GRANT_TYPE" json:"forwarding-grant-type" usage:"grant-type to use when logging into the openid provider, can be one of password, client_credentials" yaml:"forwarding-grant-type"`
 	ForwardingUsername              string                    `env:"FORWARDING_USERNAME" json:"forwarding-username" usage:"username to use when logging into the openid provider" yaml:"forwarding-username"`
 	ForwardingPassword              string                    `env:"FORWARDING_PASSWORD" json:"forwarding-password" usage:"password to use when logging into the openid provider" yaml:"forwarding-password"`
 	Realm                           string
+	OpenIDProviderCA                string            `env:"OPENID_PROVIDER_CA" json:"openid-provider-ca" usage:"path to the ca certificate for IDP" yaml:"openid-provider-ca"`
 	OpenIDProviderTimeout           time.Duration     `env:"OPENID_PROVIDER_TIMEOUT" json:"openid-provider-timeout" usage:"timeout for openid configuration on .well-known/openid-configuration" yaml:"openid-provider-timeout"`
 	OpenIDProviderRetryCount        int               `env:"OPENID_PROVIDER_RETRY_COUNT" json:"openid-provider-retry-count" usage:"number of retries for retrieving openid configuration" yaml:"openid-provider-retry-count"`
 	OpenIDProviderHeaders           map[string]string `json:"openid-provider-headers" usage:"http headers sent to idp provider" yaml:"openid-provider-headers"`
@@ -146,6 +149,7 @@ type Config struct {
 	EnableRefreshTokens             bool `env:"ENABLE_REFRESH_TOKEN" json:"enable-refresh-tokens" usage:"enables the handling of the refresh tokens" yaml:"enable-refresh-tokens"`
 	EnableSessionCookies            bool `env:"ENABLE_SESSION_COOKIES" json:"enable-session-cookies" usage:"access and refresh tokens are session only i.e. removed browser close" yaml:"enable-session-cookies"`
 	EnableLoginHandler              bool `env:"ENABLE_LOGIN_HANDLER" json:"enable-login-handler" usage:"enables the handling of the refresh tokens" yaml:"enable-login-handler"`
+	EnableRegisterHandler           bool `env:"ENABLE_REGISTER_HANDLER" json:"enable-register-handler" usage:"enables the register handler" yaml:"enable-register-handler"`
 	EnableTokenHeader               bool `env:"ENABLE_TOKEN_HEADER" json:"enable-token-header" usage:"enables the token authentication header X-Auth-Token to upstream" yaml:"enable-token-header"`
 	EnableAuthorizationHeader       bool `env:"ENABLE_AUTHORIZATION_HEADER" json:"enable-authorization-header" usage:"adds the authorization header to the proxy request" yaml:"enable-authorization-header"`
 	EnableAuthorizationCookies      bool `env:"ENABLE_AUTHORIZATION_COOKIES" json:"enable-authorization-cookies" usage:"adds the authorization cookies to the uptream proxy request" yaml:"enable-authorization-cookies"`
@@ -170,7 +174,6 @@ type Config struct {
 	EnableHmac                      bool `env:"Enable_HMAC" json:"enable-hmac" usage:"enable creating hmac for forwarded requests and verification on incoming requests"`
 	NoProxy                         bool `env:"NO_PROXY" json:"no-proxy" usage:"do not proxy requests to upstream, useful for forward-auth usage (with nginx, traefik)" yaml:"no-proxy"`
 	NoRedirects                     bool `env:"NO_REDIRECTS" json:"no-redirects" usage:"do not have back redirects when no authentication is present, 401 them" yaml:"no-redirects"`
-	SkipTokenVerification           bool `env:"SKIP_TOKEN_VERIFICATION" json:"skip-token-verification" usage:"TESTING ONLY; bypass token verification, only expiration and roles enforced" yaml:"skip-token-verification"`
 	SkipAccessTokenIssuerCheck      bool `env:"SKIP_ACCESS_TOKEN_ISSUER_CHECK" json:"skip-access-token-issuer-check" usage:"according RFC issuer should not be checked on access token, this will be default true in future" yaml:"skip-access-token-issuer-check"`
 	SkipAccessTokenClientIDCheck    bool `env:"SKIP_ACCESS_TOKEN_CLIENT_ID_CHECK" json:"skip-access-token-clientid-check" usage:"according RFC client id should not be checked on access token, this will be default true in future" yaml:"skip-access-token-clientid-check"`
 	SkipAuthorizationHeaderIdentity bool `env:"SKIP_AUTHORIZATION_HEADER_IDENTITY" json:"skip-authorization-header-identity" usage:"skip authorization header identity, means that we won't be extracting token from authorization header (e.g. if authorization header is used only by application behind gatekeeper)" yaml:"skip-authorization-header-identity"`
@@ -230,7 +233,7 @@ func NewDefaultConfig() *Config {
 		ServerReadTimeout:             constant.DefaultServerReadTimeout,
 		ServerWriteTimeout:            constant.DefaultServerWriteTimeout,
 		SkipOpenIDProviderTLSVerify:   false,
-		SkipUpstreamTLSVerify:         true,
+		SkipUpstreamTLSVerify:         false,
 		SkipAccessTokenIssuerCheck:    true,
 		SkipAccessTokenClientIDCheck:  true,
 		Tags:                          make(map[string]string),
@@ -280,7 +283,6 @@ func (r *Config) GetDefaultAllowedQueryParams() map[string]string {
 // readConfigFile reads and parses the configuration file.
 func (r *Config) ReadConfigFile(filename string) error {
 	content, err := os.ReadFile(filename)
-
 	if err != nil {
 		return err
 	}
@@ -335,6 +337,7 @@ func (r *Config) IsValid() error {
 		r.isUpstreamProxyValid,
 		r.isForwardingProxySettingsValid,
 		r.isReverseProxySettingsValid,
+		r.isCookieValid,
 	}
 
 	for _, validationFunc := range validationRegistry {
@@ -374,9 +377,12 @@ func (r *Config) isListenAdminSchemeValid() error {
 }
 
 func (r *Config) isOpenIDProviderProxyValid() error {
+	if r.OpenIDProviderCA != "" && r.SkipOpenIDProviderTLSVerify {
+		return apperrors.ErrIDPCAandSkipTLS
+	}
+
 	if r.OpenIDProviderProxy != "" {
 		_, err := url.ParseRequestURI(r.OpenIDProviderProxy)
-
 		if err != nil {
 			return apperrors.ErrInvalidIdpProviderProxyURI
 		}
@@ -571,24 +577,22 @@ func (r *Config) isReverseProxySettingsValid() error {
 
 func (r *Config) isTokenVerificationSettingsValid() error {
 	// step: if the skip verification is off, we need the below
-	if !r.SkipTokenVerification {
-		validationRegistry := []func() error{
-			r.isClientIDValid,
-			r.isDiscoveryURLValid,
-			func() error {
-				r.RedirectionURL = strings.TrimSuffix(r.RedirectionURL, "/")
-				return nil
-			},
-			r.isSecurityFilterValid,
-			r.isTokenEncryptionValid,
-			r.isSecureCookieValid,
-			r.isStoreURLValid,
-		}
+	validationRegistry := []func() error{
+		r.isClientIDValid,
+		r.isDiscoveryURLValid,
+		func() error {
+			r.RedirectionURL = strings.TrimSuffix(r.RedirectionURL, "/")
+			return nil
+		},
+		r.isSecurityFilterValid,
+		r.isTokenEncryptionValid,
+		r.isSecureCookieValid,
+		r.isStoreURLValid,
+	}
 
-		for _, validationFunc := range validationRegistry {
-			if err := validationFunc(); err != nil {
-				return err
-			}
+	for _, validationFunc := range validationRegistry {
+		if err := validationFunc(); err != nil {
+			return err
 		}
 	}
 
@@ -655,27 +659,21 @@ func (r *Config) isForwardingGrantValid() error {
 
 func (r *Config) isSecurityFilterValid() error {
 	if !r.EnableSecurityFilter {
-		if r.EnableHTTPSRedirect {
+		switch {
+		case r.EnableHTTPSRedirect:
 			return apperrors.ErrSecFilterDisabledForHTTPSRedirect
-		}
-
-		if r.EnableBrowserXSSFilter {
+		case r.EnableBrowserXSSFilter:
 			return apperrors.ErrSecFilterDisabledForXSSFilter
-		}
-
-		if r.EnableFrameDeny {
+		case r.EnableFrameDeny:
 			return apperrors.ErrSecFilterDisabledForFrameDenyFilter
-		}
-
-		if r.ContentSecurityPolicy != "" {
+		case r.ContentSecurityPolicy != "":
 			return apperrors.ErrSecFilterDisabledForCSPFilter
-		}
-
-		if len(r.Hostnames) > 0 {
+		case len(r.Hostnames) > 0:
 			return apperrors.ErrSecFilterDisabledForHostnames
+		default:
+			return nil
 		}
 	}
-
 	return nil
 }
 
@@ -777,7 +775,6 @@ func (r *Config) isExternalAuthzValid() error {
 		}
 	} else if r.EnableOpa {
 		authzURL, err := url.ParseRequestURI(r.OpaAuthzURI)
-
 		if err != nil {
 			return fmt.Errorf("not valid OPA authz URL, %w", err)
 		}
@@ -804,7 +801,6 @@ func (r *Config) updateDiscoveryURI() error {
 	)
 
 	uri, err := url.ParseRequestURI(r.DiscoveryURL)
-
 	if err != nil {
 		return fmt.Errorf(
 			"failed to parse discovery url: %w",
@@ -912,6 +908,15 @@ func (r *Config) isCorsValid() error {
 	for _, origin := range r.CorsOrigins {
 		if origin == "*" && r.CorsCredentials {
 			return apperrors.ErrInvalidOriginWithCreds
+		}
+	}
+	return nil
+}
+
+func (r *Config) isCookieValid() error {
+	if r.CookiePath != "" {
+		if !strings.HasPrefix(r.CookiePath, "/") {
+			return apperrors.ErrInvalidCookiePath
 		}
 	}
 	return nil

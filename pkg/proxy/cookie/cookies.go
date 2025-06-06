@@ -28,6 +28,7 @@ import (
 
 type Manager struct {
 	CookieDomain         string
+	CookiePath           string
 	BaseURI              string
 	SameSiteCookie       string
 	CookieAccessName     string
@@ -57,9 +58,12 @@ func (cm *Manager) DropCookie(
 		domain = cm.CookieDomain
 	}
 
-	path := cm.BaseURI
-	if path == "" {
-		path = "/"
+	path := "/"
+	switch {
+	case cm.CookiePath != "":
+		path = cm.CookiePath
+	case cm.BaseURI != "":
+		path = cm.BaseURI
 	}
 
 	cookie := &http.Cookie{
@@ -158,29 +162,48 @@ func (cm *Manager) dropCookieWithChunks(
 }
 
 // dropAccessTokenCookie drops a access token cookie.
-func (cm *Manager) DropAccessTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+func (cm *Manager) DropAccessTokenCookie(
+	req *http.Request,
+	w http.ResponseWriter,
+	value string,
+	duration time.Duration,
+) {
 	cm.dropCookieWithChunks(req, w, cm.CookieAccessName, value, duration)
 }
 
 // DropRefreshTokenCookie drops a refresh token cookie.
-func (cm *Manager) DropRefreshTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+func (cm *Manager) DropRefreshTokenCookie(
+	req *http.Request,
+	w http.ResponseWriter,
+	value string,
+	duration time.Duration,
+) {
 	cm.dropCookieWithChunks(req, w, cm.CookieRefreshName, value, duration)
 }
 
 // dropIdTokenCookie drops a id token cookie.
-func (cm *Manager) DropIDTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+func (cm *Manager) DropIDTokenCookie(
+	req *http.Request,
+	w http.ResponseWriter,
+	value string,
+	duration time.Duration,
+) {
 	cm.dropCookieWithChunks(req, w, cm.CookieIDTokenName, value, duration)
 }
 
 // dropUMATokenCookie drops a uma token cookie.
-func (cm *Manager) DropUMATokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+func (cm *Manager) DropUMATokenCookie(
+	req *http.Request,
+	w http.ResponseWriter,
+	value string,
+	duration time.Duration,
+) {
 	cm.dropCookieWithChunks(req, w, cm.CookieUMAName, value, duration)
 }
 
 // DropStateParameterCookie sets a state parameter cookie into the response.
 func (cm *Manager) DropStateParameterCookie(req *http.Request, wrt http.ResponseWriter) string {
 	uuid, err := uuid.NewV4()
-
 	if err != nil {
 		wrt.WriteHeader(http.StatusInternalServerError)
 	}
@@ -219,7 +242,9 @@ func (cm *Manager) ClearCookie(req *http.Request, wrt http.ResponseWriter, name 
 
 	// clear divided cookies.
 	for idx := 1; idx < 600; idx++ {
-		var _, err = req.Cookie(name + "-" + strconv.Itoa(idx))
+		_, err := req.Cookie(
+			name + "-" + strconv.Itoa(idx),
+		)
 
 		if err == nil {
 			cm.DropCookie(

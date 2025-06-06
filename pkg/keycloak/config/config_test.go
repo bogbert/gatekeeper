@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:testpackage
 package config
 
 import (
@@ -33,7 +34,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 )
 
-var (
+const (
 	fakeAdminRoleURL      = "/admin*"
 	fakeAdminRole         = "role:admin"
 	fakeTestAdminRolesURL = "/test_admin_roles"
@@ -190,17 +191,6 @@ func TestIsConfig(t *testing.T) {
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 50,
 			},
-		},
-		{
-			Config: &Config{
-				Listen:                ":8080",
-				SkipTokenVerification: true,
-				Upstream:              "http://120.0.0.1",
-				MaxIdleConns:          100,
-				MaxIdleConnsPerHost:   50,
-				TLSMinVersion:         constant.TLS13,
-			},
-			Ok: true,
 		},
 		{
 			Config: &Config{
@@ -392,6 +382,14 @@ func TestIsOpenIDProviderProxyValid(t *testing.T) {
 				SkipOpenIDProviderTLSVerify: true,
 			},
 			Valid: true,
+		},
+		{
+			Name: "InValidSkipOpenIDProviderTLSVerifyWithIDPCA",
+			Config: &Config{
+				OpenIDProviderCA:            "somefile",
+				SkipOpenIDProviderTLSVerify: true,
+			},
+			Valid: false,
 		},
 	}
 
@@ -704,8 +702,11 @@ func TestIsTLSFilesValid(t *testing.T) {
 				}
 
 				if certFile != "" && testCase.TLSCertificateExists {
-					err := os.WriteFile(certFile, []byte(""), 0600)
-
+					err := os.WriteFile(
+						certFile,
+						[]byte(""),
+						0o600,
+					)
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
 					}
@@ -713,8 +714,7 @@ func TestIsTLSFilesValid(t *testing.T) {
 				}
 
 				if clientCertFile != "" && testCase.TLSClientCertificateExists {
-					err := os.WriteFile(clientCertFile, []byte(""), 0600)
-
+					err := os.WriteFile(clientCertFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
 					}
@@ -722,8 +722,7 @@ func TestIsTLSFilesValid(t *testing.T) {
 				}
 
 				if privFile != "" && testCase.TLSPrivateKeyExists {
-					err := os.WriteFile(privFile, []byte(""), 0600)
-
+					err := os.WriteFile(privFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing privateKey %s", err)
 					}
@@ -731,8 +730,7 @@ func TestIsTLSFilesValid(t *testing.T) {
 				}
 
 				if caFile != "" && testCase.TLSCaCertificateExists {
-					err := os.WriteFile(caFile, []byte(""), 0600)
-
+					err := os.WriteFile(caFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
 					}
@@ -923,8 +921,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 				}
 
 				if certFile != "" && testCase.TLSAdminCertificateExists {
-					err := os.WriteFile(certFile, []byte(""), 0600)
-
+					err := os.WriteFile(certFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
 					}
@@ -932,8 +929,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 				}
 
 				if clientCertFile != "" && testCase.TLSAdminClientCertificateExists {
-					err := os.WriteFile(clientCertFile, []byte(""), 0600)
-
+					err := os.WriteFile(clientCertFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
 					}
@@ -941,8 +937,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 				}
 
 				if privFile != "" && testCase.TLSAdminPrivateKeyExists {
-					err := os.WriteFile(privFile, []byte(""), 0600)
-
+					err := os.WriteFile(privFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing privateKey %s", err)
 					}
@@ -950,8 +945,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 				}
 
 				if caFile != "" && testCase.TLSAdminCaCertificateExists {
-					err := os.WriteFile(caFile, []byte(""), 0600)
-
+					err := os.WriteFile(caFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
 					}
@@ -1178,26 +1172,17 @@ func TestIsTokenVerificationSettingsValid(t *testing.T) {
 		{
 			Name: "ValidTokenVerificationSettings",
 			Config: &Config{
-				SkipTokenVerification: false,
-				ClientID:              "some-client",
-				DiscoveryURL:          "https://somediscoveryurl",
-			},
-			Valid: true,
-		},
-		{
-			Name: "ValidTokenVerificationSettingsSkipVerification",
-			Config: &Config{
-				SkipTokenVerification: true,
+				ClientID:     "some-client",
+				DiscoveryURL: "https://somediscoveryurl",
 			},
 			Valid: true,
 		},
 		{
 			Name: "InValidTokenVerificationSettings",
 			Config: &Config{
-				SkipTokenVerification: false,
-				ClientID:              "some-client",
-				DiscoveryURL:          "https://somediscoveryurl",
-				EnableRefreshTokens:   true,
+				ClientID:            "some-client",
+				DiscoveryURL:        "https://somediscoveryurl",
+				EnableRefreshTokens: true,
 			},
 			Valid: false,
 		},
@@ -2650,6 +2635,45 @@ func TestIsCorsValid(t *testing.T) {
 			testCase.Name,
 			func(t *testing.T) {
 				err := testCase.Config.isCorsValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestIsCookiePathValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidCookiePath",
+			Config: &Config{
+				CookiePath: "/path",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidCookiePath",
+			Config: &Config{
+				CookiePath: "path",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isCookieValid()
 				if err != nil && testCase.Valid {
 					t.Fatalf("Expected test not to fail")
 				}

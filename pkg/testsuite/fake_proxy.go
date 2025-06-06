@@ -1,4 +1,4 @@
-package testsuite
+package testsuite_test
 
 import (
 	"crypto/tls"
@@ -165,13 +165,12 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			client.SetTLSClientConfig(&tls.Config{MaxVersion: reqCfg.TLSMax})
 		}
 
-		request := client.SetRedirectPolicy(resty.NoRedirectPolicy()).R()
+		client.SetRedirectPolicy(resty.NoRedirectPolicy())
 
 		if reqCfg.ProxyProtocol != "" {
 			client.SetTransport(&http.Transport{
 				Dial: func(_, addr string) (net.Conn, error) {
 					conn, err := net.Dial("tcp", addr)
-
 					if err != nil {
 						return nil, err
 					}
@@ -209,20 +208,16 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			}
 		}
 
-		if reqCfg.ExpectedProxy {
-			request.SetResult(&upstream)
-		}
-
 		if reqCfg.ProxyRequest {
 			client.SetProxy(f.getServiceURL())
 		}
 
 		if reqCfg.BasicAuth {
-			request.SetBasicAuth(reqCfg.Username, reqCfg.Password)
+			client.SetBasicAuth(reqCfg.Username, reqCfg.Password)
 		}
 
 		if reqCfg.RawToken != "" {
-			setRequestAuthentication(f.config, client, request, &reqCfg, reqCfg.RawToken)
+			setRequestAuthentication(f.config, client, &reqCfg, reqCfg.RawToken)
 		}
 
 		if len(reqCfg.Cookies) > 0 {
@@ -230,11 +225,11 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 		}
 
 		if len(reqCfg.Headers) > 0 {
-			request.SetHeaders(reqCfg.Headers)
+			client.SetHeaders(reqCfg.Headers)
 		}
 
 		if reqCfg.FormValues != nil {
-			request.SetFormData(reqCfg.FormValues)
+			client.SetFormData(reqCfg.FormValues)
 		}
 
 		if reqCfg.HasToken {
@@ -270,12 +265,18 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			if reqCfg.NotSigned {
 				authToken, err := token.GetUnsignedToken()
 				require.NoError(t, err)
-				setRequestAuthentication(f.config, client, request, &reqCfg, authToken)
+				setRequestAuthentication(f.config, client, &reqCfg, authToken)
 			} else {
 				authToken, err := token.GetToken()
 				require.NoError(t, err)
-				setRequestAuthentication(f.config, client, request, &reqCfg, authToken)
+				setRequestAuthentication(f.config, client, &reqCfg, authToken)
 			}
+		}
+
+		request := client.R()
+
+		if reqCfg.ExpectedProxy {
+			request.SetResult(&upstream)
 		}
 
 		// step: execute the request
@@ -293,6 +294,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 			if !strings.Contains(err.Error(), reqCfg.ExpectedRequestError) {
 				assert.Fail(
 					t,
+					"result error does not match expected",
 					"case %d, expected error %s, got error: %s",
 					idx,
 					reqCfg.ExpectedRequestError,
@@ -328,23 +330,21 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 
 		if reqCfg.ExpectedLocation != "" {
 			loc, _ := url.Parse(resp.Header().Get("Location"))
-			assert.True(
+			assert.Contains(
 				t,
-				strings.Contains(
-					loc.String(),
-					reqCfg.ExpectedLocation,
-				),
+				loc.String(),
+				reqCfg.ExpectedLocation,
 				"expected location to contain %s",
 				loc.String(),
 			)
 
 			if loc.Query().Get("state") != "" {
 				state, err := uuid.FromString(loc.Query().Get("state"))
-
 				if err != nil {
 					assert.Fail(
 						t,
-						"expected state parameter with valid UUID, got: %s with error %s",
+						"expected state parameter with valid UUID",
+						"got: %s with error %s",
 						state.String(),
 						err,
 					)
@@ -588,7 +588,12 @@ func (f *fakeProxy) performUserLogin(reqCfg *fakeRequest) error {
 	return nil
 }
 
-func setRequestAuthentication(cfg *config.Config, client *resty.Client, request *resty.Request, c *fakeRequest, token string) {
+func setRequestAuthentication(
+	cfg *config.Config,
+	client *resty.Client,
+	c *fakeRequest,
+	token string,
+) {
 	switch c.HasCookieToken {
 	case true:
 		cookies := client.Cookies
@@ -609,7 +614,7 @@ func setRequestAuthentication(cfg *config.Config, client *resty.Client, request 
 			})
 		}
 	default:
-		request.SetAuthToken(token)
+		client.SetAuthToken(token)
 	}
 }
 
@@ -635,7 +640,6 @@ func newTestProxyService(config *config.Config) (*proxy.OauthProxy, *fakeAuthSer
 	config.Verbose = false
 	config.EnableLogging = false
 	err := config.Update()
-
 	if err != nil {
 		panic(errors.Join(ErrCreateFakeProxy, err).Error())
 	}
@@ -657,6 +661,7 @@ func newTestProxyService(config *config.Config) (*proxy.OauthProxy, *fakeAuthSer
 	return proxy, auth, service.URL
 }
 
+//nolint:unparam
 func newFakeHTTPRequest(method, path string) *http.Request {
 	return &http.Request{
 		Method: method,
@@ -737,7 +742,6 @@ func makeTestCodeFlowLogin(location string, xforwarded bool) (*http.Response, []
 	flowCookies := make([]*http.Cookie, 0)
 
 	uri, err := url.Parse(location)
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -768,13 +772,12 @@ func makeTestCodeFlowLogin(location string, xforwarded bool) (*http.Response, []
 		// step: make the request
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{
-				//nolint:gas
+				//nolint:gas,gosec
 				InsecureSkipVerify: true,
 			},
 		}
 
 		resp, err = transport.RoundTrip(req)
-
 		if err != nil {
 			return nil, nil, err
 		}

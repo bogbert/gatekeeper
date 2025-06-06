@@ -31,7 +31,7 @@ data:
       "actionTokenGeneratedByUserLifespan": 300,
       "enabled": true,
       "sslRequired": "external",
-      "registrationAllowed": false,
+      "registrationAllowed": true,
       "registrationEmailAsUsername": false,
       "rememberMe": false,
       "verifyEmail": false,
@@ -2438,7 +2438,7 @@ spec:
     spec:
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:19.0.2
+          image: quay.io/keycloak/keycloak:26.2.3
           command: 
             - /opt/keycloak/bin/kc.sh
             - start-dev
@@ -2626,7 +2626,7 @@ spec:
             - -c
             - "while true;do sleep 10;done"
         - name: proxy
-          image: quay.io/gogatekeeper/gatekeeper:3.1.0
+          image: quay.io/gogatekeeper/gatekeeper:3.4.0
           imagePullPolicy: Never
           args:
             - --client-id=test-client

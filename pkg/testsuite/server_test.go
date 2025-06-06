@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package testsuite
+package testsuite_test
 
 import (
 	"crypto/tls"
@@ -683,7 +683,7 @@ func TestEnableHmacForwardingProxy(t *testing.T) {
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusBadRequest,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -1017,7 +1017,7 @@ func TestDefaultDenial(t *testing.T) {
 					URI:       "/not_permited",
 					Redirects: false,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 				// lowercase methods should not be valid
@@ -1027,7 +1027,7 @@ func TestDefaultDenial(t *testing.T) {
 					Redirects:    false,
 					ExpectedCode: http.StatusNotImplemented,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 				{
@@ -1036,7 +1036,7 @@ func TestDefaultDenial(t *testing.T) {
 					Redirects:    true,
 					ExpectedCode: http.StatusNotImplemented,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 				// any "crap" methods should not be valid
@@ -1046,7 +1046,7 @@ func TestDefaultDenial(t *testing.T) {
 					Redirects:    false,
 					ExpectedCode: http.StatusNotImplemented,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 				{
@@ -1058,7 +1058,7 @@ func TestDefaultDenial(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusNotImplemented,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 				{
@@ -1165,7 +1165,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			URI:       "/not_permited",
 			Redirects: false,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 		// lowercase methods should not be valid
@@ -1175,7 +1175,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			Redirects:    false,
 			ExpectedCode: http.StatusNotImplemented,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 		// any "crap" methods should not be valid
@@ -1185,7 +1185,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			Redirects:    false,
 			ExpectedCode: http.StatusNotImplemented,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 		{
@@ -1197,7 +1197,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			Redirects:     false,
 			ExpectedCode:  http.StatusForbidden,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 		{
@@ -1209,7 +1209,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			Redirects:     true,
 			ExpectedCode:  http.StatusForbidden,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 		{
@@ -1233,7 +1233,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			Redirects:     false,
 			ExpectedCode:  http.StatusForbidden,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 		{
@@ -1257,7 +1257,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			Redirects:     false,
 			ExpectedCode:  http.StatusForbidden,
 			ExpectedContent: func(body string, _ int) {
-				assert.Equal(t, "", body)
+				assert.Empty(t, body)
 			},
 		},
 	}
@@ -1294,7 +1294,7 @@ func TestNoProxy(t *testing.T) {
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusOK,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -1323,7 +1323,7 @@ func TestNoProxy(t *testing.T) {
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusUnauthorized,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -1353,7 +1353,7 @@ func TestNoProxy(t *testing.T) {
 					Redirects:     true,
 					ExpectedCode:  http.StatusSeeOther,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 					ExpectedLocation: "https://thiswillbereplaced/oauth",
 					Headers: map[string]string{
@@ -1388,7 +1388,7 @@ func TestNoProxy(t *testing.T) {
 					Redirects:     true,
 					ExpectedCode:  http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -1428,7 +1428,7 @@ func TestNoProxy(t *testing.T) {
 					Redirects:       true,
 					ExpectedCode:    http.StatusOK,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 					Headers: map[string]string{
 						constant.HeaderXForwardedURI:    "/private",
@@ -1443,7 +1443,7 @@ func TestNoProxy(t *testing.T) {
 					Redirects:       true,
 					ExpectedCode:    http.StatusForbidden,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 					Headers: map[string]string{
 						constant.HeaderXForwardedURI:    "/private",
@@ -2043,8 +2043,7 @@ func TestTLS(t *testing.T) {
 
 				if certFile != "" {
 					fakeCertByte := []byte(fakeCert)
-					err := os.WriteFile(certFile, fakeCertByte, 0600)
-
+					err := os.WriteFile(certFile, fakeCertByte, 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing certificate %s", err)
 					}
@@ -2053,8 +2052,7 @@ func TestTLS(t *testing.T) {
 
 				if privFile != "" {
 					fakeKeyByte := []byte(fakePrivateKey)
-					err := os.WriteFile(privFile, fakeKeyByte, 0600)
-
+					err := os.WriteFile(privFile, fakeKeyByte, 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing privateKey %s", err)
 					}
@@ -2063,8 +2061,7 @@ func TestTLS(t *testing.T) {
 
 				if caFile != "" {
 					fakeCAByte := []byte(fakeCA)
-					err := os.WriteFile(caFile, fakeCAByte, 0600)
-
+					err := os.WriteFile(caFile, fakeCAByte, 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
 					}
@@ -2144,7 +2141,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2218,7 +2215,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
@@ -2242,7 +2239,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusNotImplemented,
 					ExpectedContent: func(body string, _ int) {
-						assert.Equal(t, "", body)
+						assert.Empty(t, body)
 					},
 				},
 			},
