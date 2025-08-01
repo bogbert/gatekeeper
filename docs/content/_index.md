@@ -520,7 +520,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:3.4.0
+  image: quay.io/gogatekeeper/gatekeeper:3.5.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -547,7 +547,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:3.4.0
+  image: quay.io/gogatekeeper/gatekeeper:3.5.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -1095,7 +1095,6 @@ There are 2 possibilities how to logout:
    Post Logout Redirection - redirection url will be gathered from this places from highest priority to lowest:
 
    - --post-logout-redirect-uri option - recommended
-   - **/oauth/logout?redirect=url** - from `redirect` url query parameter, not recommended, kept only for convenience
    - --redirection-url option
 
 2. Using keycloak mechanism, valid only for keycloak 18+ `--enable-logout-redirect=true`

@@ -620,18 +620,6 @@ func TestLogoutHandlerGood(t *testing.T) {
 			},
 		},
 		{
-			Name:          "TestLogoutWithRedirectQueryParam",
-			ProxySettings: func(_ *config.Config) {},
-			ExecutionSettings: []fakeRequest{
-				{
-					URI:              logoutURL + "?redirect=http://example.com",
-					HasToken:         true,
-					ExpectedCode:     http.StatusSeeOther,
-					ExpectedLocation: "http://example.com",
-				},
-			},
-		},
-		{
 			Name: "TestLogoutWithEnabledLogoutRedirect",
 			ProxySettings: func(c *config.Config) {
 				c.EnableLogoutRedirect = true
@@ -642,19 +630,6 @@ func TestLogoutHandlerGood(t *testing.T) {
 					HasToken:         true,
 					ExpectedCode:     http.StatusSeeOther,
 					ExpectedLocation: "http://127.0.0.1",
-				},
-			},
-		},
-		{
-			Name: "TestLogoutWithEmptyRedirectQueryParam",
-			ProxySettings: func(c *config.Config) {
-				c.RedirectionURL = "http://example.com"
-			},
-			ExecutionSettings: []fakeRequest{
-				{
-					URI:          logoutURL + "?redirect=",
-					HasToken:     true,
-					ExpectedCode: http.StatusSeeOther,
 				},
 			},
 		},
@@ -678,18 +653,15 @@ func TestLogoutHandlerGood(t *testing.T) {
 func TestSkipOpenIDProviderTLSVerifyLogoutHandler(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.SkipOpenIDProviderTLSVerify = true
+	const postLogoutURI = "http://example.com"
+	cfg.PostLogoutRedirectURI = postLogoutURI
 	logoutURL := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL)
 	requests := []fakeRequest{
 		{
-			URI:          logoutURL,
-			HasToken:     true,
-			ExpectedCode: http.StatusOK,
-		},
-		{
-			URI:              logoutURL + "?redirect=http://example.com",
+			URI:              logoutURL,
 			HasToken:         true,
 			ExpectedCode:     http.StatusSeeOther,
-			ExpectedLocation: "http://example.com",
+			ExpectedLocation: postLogoutURI,
 		},
 	}
 	newFakeProxy(cfg, &fakeAuthConfig{EnableTLS: true}).RunTests(t, requests)
@@ -717,18 +689,15 @@ func TestSkipOpenIDProviderTLSVerifyLogoutHandler(t *testing.T) {
 func TestRevocation(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.RevocationEndpoint = ""
+	const postLogoutURI = "http://example.com"
+	cfg.PostLogoutRedirectURI = postLogoutURI
 	logoutURL := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL)
 	requests := []fakeRequest{
 		{
-			URI:          logoutURL,
-			HasToken:     true,
-			ExpectedCode: http.StatusOK,
-		},
-		{
-			URI:              logoutURL + "?redirect=http://example.com",
+			URI:              logoutURL,
 			HasToken:         true,
 			ExpectedCode:     http.StatusSeeOther,
-			ExpectedLocation: "http://example.com",
+			ExpectedLocation: postLogoutURI,
 		},
 	}
 	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, requests)
@@ -741,7 +710,7 @@ func TestRevocation(t *testing.T) {
 			ExpectedCode: http.StatusInternalServerError,
 		},
 		{
-			URI:          logoutURL + "?redirect=http://example.com",
+			URI:          logoutURL,
 			HasToken:     true,
 			ExpectedCode: http.StatusInternalServerError,
 		},

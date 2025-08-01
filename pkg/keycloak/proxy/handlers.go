@@ -653,20 +653,11 @@ func logoutHandler(
 		if postLogoutRedirectURI != "" {
 			redirectURL = postLogoutRedirectURI
 		} else {
-			for k := range req.URL.Query() {
-				if k == "redirect" {
-					redirectURL = req.URL.Query().Get("redirect")
-
-					// Only accept redirections starting with "/" to prevent open redirect attacks
-					if !strings.HasPrefix(redirectURL, "/") {
-						// then we can default to redirection url
-						redirectURL = strings.TrimSuffix(
-							redirectionURL,
-							"/oauth/callback",
-						)
-					}
-				}
-			}
+			// then we can default to redirection url
+			redirectURL = strings.TrimSuffix(
+				redirectionURL,
+				"/oauth/callback",
+			)
 		}
 
 		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
@@ -681,7 +672,6 @@ func logoutHandler(
 		// step: can either use the access token or the refresh token
 		identityToken := user.RawToken
 
-		//nolint:vetshadow
 		if refresh, _, err := session.RetrieveRefreshToken(
 			store,
 			cookieRefreshName,

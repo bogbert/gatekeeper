@@ -24,15 +24,16 @@ import (
 	"html/template"
 	"io"
 	httplog "log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
-	"runtime"
 	"strings"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/Nerzal/gocloak/v13"
 	proxyproto "github.com/armon/go-proxyproto"
 	backoff "github.com/cenkalti/backoff/v4"
@@ -66,8 +67,19 @@ import (
 
 //nolint:gochecknoinits
 func init() {
-	_, _ = time.LoadLocation("UTC")      // ensure all time is in UTC [NOTE(fredbi): no this does just nothing]
-	runtime.GOMAXPROCS(runtime.NumCPU()) // set the core
+	_, err := memlimit.SetGoMemLimitWithOpts(
+		memlimit.WithProvider(
+			memlimit.ApplyFallback(
+				memlimit.FromCgroup,
+				memlimit.FromSystem,
+			),
+		),
+		memlimit.WithLogger(slog.Default()),
+	)
+	if err != nil {
+		panic("problem setting memlimit")
+	}
+
 	prometheus.MustRegister(metrics.CertificateRotationMetric)
 	prometheus.MustRegister(metrics.LatencyMetric)
 	prometheus.MustRegister(metrics.OauthLatencyMetric)
@@ -344,6 +356,18 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.SecureCookie,
 		r.Config.CookieOAuthStateName,
 		WithOAuthURI,
+		false,
+	)
+
+	loginGetRedirectionURL := handlers.GetRedirectionURL(
+		r.Log,
+		r.Config.RedirectionURL,
+		r.Config.NoProxy,
+		r.Config.NoRedirects,
+		r.Config.SecureCookie,
+		r.Config.CookieOAuthStateName,
+		WithOAuthURI,
+		true,
 	)
 
 	if r.Config.EnableHmac {
@@ -437,7 +461,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.IdpClient.RestyClient().GetClient(),
 		r.Config.EnableLoginHandler,
 		newOAuth2Config,
-		getRedirectionURL,
+		loginGetRedirectionURL,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
 		r.Config.EncryptionKey,
@@ -1377,7 +1401,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		upstream.Scheme = constant.UnsecureScheme
 	}
 	// create the upstream tls configure
-	//nolint:gas,gosec
+	//nolint:gosec
 	tlsConfig := &tls.Config{InsecureSkipVerify: r.Config.SkipUpstreamTLSVerify}
 
 	// are we using a client certificate
