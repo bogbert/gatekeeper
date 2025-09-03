@@ -814,7 +814,26 @@ func (r *Config) updateDiscoveryURI() error {
 }
 
 func (r *Config) extractDiscoveryURIComponents() error {
-	// Try Cognito pattern first
+	// Test Keycloak pattern first (more specific)
+	keycloakReg := regexp.MustCompile(
+		`(?P<legacy>(/auth){0,1})/realms/(?P<realm>[^/]+)(/{0,1}).*`,
+	)
+
+	keycloakMatches := keycloakReg.FindStringSubmatch(r.DiscoveryURI.Path)
+
+	if len(keycloakMatches) > 0 {
+		legacyIndex := keycloakReg.SubexpIndex("legacy")
+		realmIndex := keycloakReg.SubexpIndex("realm")
+
+		if keycloakMatches[legacyIndex] != "" {
+			r.IsDiscoverURILegacy = true
+		}
+
+		r.Realm = keycloakMatches[realmIndex]
+		return nil
+	}
+
+	// Fallback to Cognito pattern
 	cognitoReg := regexp.MustCompile(`/(?P<userPoolId>[^/]+)/?$`)
 	cognitoMatches := cognitoReg.FindStringSubmatch(r.DiscoveryURI.Path)
 
@@ -825,26 +844,7 @@ func (r *Config) extractDiscoveryURIComponents() error {
 		return nil
 	}
 
-	// Fallback to original Keycloak logic
-	reg := regexp.MustCompile(
-		`(?P<legacy>(/auth){0,1})/realms/(?P<realm>[^/]+)(/{0,1}).*`,
-	)
-
-	matches := reg.FindStringSubmatch(r.DiscoveryURI.Path)
-
-	if len(matches) == 0 {
-		return apperrors.ErrBadDiscoveryURIFormat
-	}
-
-	legacyIndex := reg.SubexpIndex("legacy")
-	realmIndex := reg.SubexpIndex("realm")
-
-	if matches[legacyIndex] != "" {
-		r.IsDiscoverURILegacy = true
-	}
-
-	r.Realm = matches[realmIndex]
-	return nil
+	return apperrors.ErrBadDiscoveryURIFormat
 }
 
 func (r *Config) isPKCEValid() error {
