@@ -814,6 +814,18 @@ func (r *Config) updateDiscoveryURI() error {
 }
 
 func (r *Config) extractDiscoveryURIComponents() error {
+	// Try Cognito pattern first
+	cognitoReg := regexp.MustCompile(`/(?P<userPoolId>[^/]+)/?$`)
+	cognitoMatches := cognitoReg.FindStringSubmatch(r.DiscoveryURI.Path)
+
+	if len(cognitoMatches) > 0 {
+		userPoolIndex := cognitoReg.SubexpIndex("userPoolId")
+		r.Realm = cognitoMatches[userPoolIndex]
+		r.IsDiscoverURILegacy = false
+		return nil
+	}
+
+	// Fallback to original Keycloak logic
 	reg := regexp.MustCompile(
 		`(?P<legacy>(/auth){0,1})/realms/(?P<realm>[^/]+)(/{0,1}).*`,
 	)
