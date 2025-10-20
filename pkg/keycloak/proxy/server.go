@@ -17,8 +17,10 @@ package proxy
 
 import (
 	"context"
+	"crypto/fips140"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -112,12 +114,30 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 		zap.String("version", core.Version),
 	)
 
+	if config.Verbose {
+		dup := *config
+		dup.ClientSecret = ""
+		dup.EncryptionKey = ""
+		dup.ForwardingPassword = ""
+		out, err := json.Marshal(dup) //nolint:musttag
+		if err != nil {
+			return nil, err
+		}
+
+		log.Debug(
+			"displaying configuration",
+			zap.ByteString("configuration", out),
+		)
+	}
+
 	svc := &OauthProxy{
 		Config:         config,
 		Log:            log,
 		metricsHandler: promhttp.Handler(),
 		pat:            &PAT{},
 	}
+
+	log.Info("FIPS status", zap.Bool("fips", fips140.Enabled()))
 
 	// parse the upstream endpoint
 	if svc.Endpoint, err = url.Parse(config.Upstream); err != nil {
@@ -126,7 +146,18 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 
 	// initialize the store if any
 	if config.StoreURL != "" {
-		if svc.Store, err = storage.CreateStorage(config.StoreURL); err != nil {
+		log.Info("enabling store")
+
+		svc.Store, err = setupStore(
+			config.StoreURL,
+			config.EnableStoreHA,
+			config.TLSStoreCACertificate,
+			config.TLSStoreClientCertificate,
+			config.TLSStoreClientPrivateKey,
+			config.OpenIDProviderTimeout,
+		)
+		if err != nil {
+			svc.Log.Error("failed to setup store", zap.Error(err))
 			return nil, err
 		}
 	}
@@ -171,6 +202,53 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 	}
 
 	return svc, nil
+}
+
+func setupStore(
+	storeURL string,
+	enableStoreHA bool,
+	tlsStoreCaCertificate string,
+	tlsStoreClientCertificate string,
+	tlsStoreClientPrivateKey string,
+	timeout time.Duration,
+) (storage.Storage, error) {
+	var certPool *x509.CertPool
+	var keyPair *tls.Certificate
+	var err error
+
+	if tlsStoreCaCertificate != "" {
+		if certPool, err = encryption.LoadCert(tlsStoreCaCertificate); err != nil {
+			return nil, errors.Join(apperrors.ErrLoadStoreCA, err)
+		}
+	}
+
+	if tlsStoreClientCertificate != "" && tlsStoreClientPrivateKey != "" {
+		keyPair, err = encryption.LoadKeyPair(
+			tlsStoreClientCertificate,
+			tlsStoreClientPrivateKey,
+		)
+		if err != nil {
+			return nil, errors.Join(apperrors.ErrLoadStoreClientPair, err)
+		}
+	}
+
+	store, err := storage.CreateStorage(
+		storeURL,
+		enableStoreHA,
+		certPool,
+		keyPair,
+	)
+	if err != nil {
+		return nil, errors.Join(apperrors.ErrCreateStore, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := store.Test(ctx); err != nil {
+		return nil, err
+	}
+
+	return store, nil
 }
 
 // createLogger is responsible for creating the service logger.
@@ -345,6 +423,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.SkipAuthorizationHeaderIdentity,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
+		r.Config.EnableOptionalEncryption,
 		r.Config.EncryptionKey,
 	)
 
@@ -357,6 +436,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.CookieOAuthStateName,
 		WithOAuthURI,
 		false,
+		r.Config.EnableXForwardedHeaders,
 	)
 
 	loginGetRedirectionURL := handlers.GetRedirectionURL(
@@ -368,6 +448,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.CookieOAuthStateName,
 		WithOAuthURI,
 		true,
+		r.Config.EnableXForwardedHeaders,
 	)
 
 	if r.Config.EnableHmac {
@@ -395,6 +476,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.Headers,
 		r.Endpoint,
 		r.Config.PreserveHost,
+		r.Config.EnableSigningHmac,
+		r.Config.EncryptionKey,
 		r.Upstream,
 	)
 	if !r.Config.NoProxy {
@@ -453,6 +536,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		newOAuth2Config,
 		r.Store,
 		r.Config.AccessTokenDuration,
+		r.Config.EnableOptionalEncryption,
 	)
 
 	loginHand := loginHandler(
@@ -478,6 +562,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.RedirectionURL,
 		r.Config.DiscoveryURL,
 		r.Config.RevocationEndpoint,
+		r.Config.CookieAccessName,
 		r.Config.CookieIDTokenName,
 		r.Config.CookieRefreshName,
 		r.Config.ClientID,
@@ -486,6 +571,11 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
 		r.Config.EnableLogoutRedirect,
+		r.Config.EnableOptionalEncryption,
+		r.Config.EnableLogoutAuth,
+		getIdentity,
+		accessForbidden,
+		r.Provider,
 		r.Store,
 		r.Cm,
 		r.IdpClient.RestyClient().GetClient(),
@@ -566,6 +656,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.OAuthURI,
 		r.Config.AllowedQueryParams,
 		r.Config.DefaultAllowedQueryParams,
+		r.Config.EnableXForwardedHeaders,
 	)
 	noredToAuthMiddleware := gmiddleware.NoRedirectToAuthorizationMiddleware(r.Log)
 
@@ -595,7 +686,13 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				r.Config.CookieAccessName,
 			),
 			)
-			eng.With(authMid, authFailMiddleware).Get(constant.LogoutURL, logoutHand)
+
+			if r.Config.EnableLogoutAuth {
+				eng.With(authMid, authFailMiddleware).Get(constant.LogoutURL, logoutHand)
+			} else {
+				eng.Get(constant.LogoutURL, logoutHand)
+			}
+
 			eng.With(authMid, authFailMiddleware).Get(
 				constant.TokenURL,
 				handlers.TokenHandler(getIdentity, r.Config.CookieAccessName, accessError),
@@ -724,6 +821,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			r.Config.EnableTokenHeader,
 			r.Config.EnableAuthorizationHeader,
 			r.Config.EnableAuthorizationCookies,
+			r.Config.EnableHeaderEncoding,
 		)
 
 		middlewares := []func(http.Handler) http.Handler{
@@ -761,6 +859,19 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			middlewares,
 			identityMiddleware,
 		)
+
+		var signMid func(http.Handler) http.Handler
+		if r.Config.EnableSigning && !r.Config.NoProxy {
+			signMid = SigningMiddleware(
+				r.Log,
+				r.pat,
+				r.Config.ForwardingDomains,
+			)
+			middlewares = append(
+				middlewares,
+				signMid,
+			)
+		}
 
 		if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
 			middlewares = []func(http.Handler) http.Handler{
@@ -846,7 +957,17 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			case res.WhiteListedAnon:
 				p.MethodFunc(method, res.URL, handlers.EmptyHandler)
 			case res.WhiteListed:
-				engine.MethodFunc(method, res.URL, handlers.EmptyHandler)
+				if r.Config.EnableSigning && !r.Config.NoProxy {
+					signMid = SigningMiddleware(
+						r.Log,
+						r.pat,
+						r.Config.ForwardingDomains,
+					)
+					eng := engine.With(signMid)
+					eng.MethodFunc(method, res.URL, handlers.EmptyHandler)
+				} else {
+					engine.MethodFunc(method, res.URL, handlers.EmptyHandler)
+				}
 			default:
 				eProt.MethodFunc(method, res.URL, handlers.EmptyHandler)
 			}
@@ -914,18 +1035,42 @@ func (r *OauthProxy) createForwardingProxy() error {
 	r.Router = proxy
 
 	// setup the tls configuration
-	if r.Config.TLSCaCertificate != "" && r.Config.TLSCaPrivateKey != "" {
-		cAuthority, err := encryption.LoadCA(r.Config.TLSCaCertificate, r.Config.TLSCaPrivateKey)
+	if r.Config.TLSForwardingCACertificate != "" && r.Config.TLSForwardingCAPrivateKey != "" {
+		r.Log.Info("enabling generating server certificate from CA")
+
+		cAuthority, err := encryption.LoadKeyPair(r.Config.TLSForwardingCACertificate, r.Config.TLSForwardingCAPrivateKey)
 		if err != nil {
-			return fmt.Errorf("unable to load certificate authority, error: %w", err)
+			return fmt.Errorf("unable to load certificate/private key pair for CA, error: %w", err)
+		}
+
+		var clientCA *x509.CertPool
+		if r.Config.TLSClientCACertificate != "" {
+			r.Log.Info("enabling tls client authentication")
+
+			clientCA, err = encryption.LoadCert(r.Config.TLSClientCACertificate)
+			if err != nil {
+				return err
+			}
 		}
 
 		// implement the goproxy connect method
 		proxy.OnRequest().HandleConnectFunc(
 			func(host string, _ *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+				tlsConfig := goproxy.TLSConfigFromCA(cAuthority)
+				tlsFunc := tlsConfig
+
+				if r.Config.TLSClientCACertificate != "" {
+					tlsFunc = func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error) {
+						cfg, err := tlsConfig(host, ctx)
+						cfg.ClientAuth = tls.RequireAndVerifyClientCert
+						cfg.ClientCAs = clientCA
+						return cfg, err
+					}
+				}
+
 				return &goproxy.ConnectAction{
 					Action:    goproxy.ConnectMitm,
-					TLSConfig: goproxy.TLSConfigFromCA(cAuthority),
+					TLSConfig: tlsFunc,
 				}, host
 			},
 		)
@@ -1002,7 +1147,7 @@ func (r *OauthProxy) Run() (context.Context, error) {
 	r.ErrGroup = errGroup
 	patDone := make(chan bool)
 
-	if r.Config.EnableUma || r.Config.EnableForwarding {
+	if r.Config.EnableUma || r.Config.EnableForwarding || r.Config.EnableSigning {
 		r.ErrGroup.Go(func() error {
 			err := refreshPAT(
 				ctx,
@@ -1015,6 +1160,7 @@ func (r *OauthProxy) Run() (context.Context, error) {
 				r.Config.PatRetryCount,
 				r.Config.PatRetryInterval,
 				r.Config.EnableForwarding,
+				r.Config.EnableSigning,
 				r.Config.ForwardingGrantType,
 				r.IdpClient,
 				r.Config.ForwardingUsername,
@@ -1107,11 +1253,8 @@ func (r *OauthProxy) Run() (context.Context, error) {
 				adminListenerConfig.certificate = r.Config.TLSAdminCertificate
 				adminListenerConfig.privateKey = r.Config.TLSAdminPrivateKey
 			}
-			if r.Config.TLSAdminCaCertificate != "" {
-				adminListenerConfig.ca = r.Config.TLSAdminCaCertificate
-			}
-			if r.Config.TLSAdminClientCertificate != "" {
-				adminListenerConfig.clientCert = r.Config.TLSAdminClientCertificate
+			if r.Config.TLSAdminClientCACertificate != "" {
+				adminListenerConfig.clientCACert = r.Config.TLSAdminClientCACertificate
 			}
 
 			adminListener, err = r.createHTTPListener(adminListenerConfig)
@@ -1167,9 +1310,11 @@ func (r *OauthProxy) Shutdown() error {
 	}
 
 	r.Log.Debug("waiting for goroutines to finish")
-	if routineErr := r.ErrGroup.Wait(); routineErr != nil {
-		if !errors.Is(routineErr, http.ErrServerClosed) {
-			err = errors.Join(err, routineErr)
+	if r.ErrGroup != nil {
+		if routineErr := r.ErrGroup.Wait(); routineErr != nil {
+			if !errors.Is(routineErr, http.ErrServerClosed) {
+				err = errors.Join(err, routineErr)
+			}
 		}
 	}
 
@@ -1179,9 +1324,8 @@ func (r *OauthProxy) Shutdown() error {
 // listenerConfig encapsulate listener options.
 type listenerConfig struct {
 	hostnames           []string // list of hostnames the service will respond to
-	ca                  string   // the path to a certificate authority
 	certificate         string   // the path to the certificate if any
-	clientCert          string   // the path to a client certificate to use for mutual tls
+	clientCACert        string   // the path to a CA certificate used to verify clients, mutual tls
 	letsEncryptCacheDir string   // the path to cache letsencrypt certificates
 	listen              string   // the interface to bind the listener to
 	privateKey          string   // the path to the private key if any
@@ -1215,9 +1359,8 @@ func makeListenerConfig(config *config.Config) listenerConfig {
 		// TLS settings
 		useFileTLS:        config.TLSPrivateKey != "" && config.TLSCertificate != "",
 		privateKey:        config.TLSPrivateKey,
-		ca:                config.TLSCaCertificate,
 		certificate:       config.TLSCertificate,
-		clientCert:        config.TLSClientCertificate,
+		clientCACert:      config.TLSClientCACertificate,
 		useLetsEncryptTLS: config.UseLetsEncrypt,
 		useSelfSignedTLS:  config.EnabledSelfSignedTLS,
 		minTLSVersion:     minTLSVersion,
@@ -1361,8 +1504,8 @@ func (r *OauthProxy) createHTTPListener(config listenerConfig) (net.Listener, er
 		listener = tls.NewListener(listener, tlsConfig)
 
 		// @check if we doing mutual tls
-		if config.clientCert != "" {
-			caCert, err := os.ReadFile(config.clientCert)
+		if config.clientCACert != "" {
+			caCert, err := os.ReadFile(config.clientCACert)
 			if err != nil {
 				return nil, err
 			}
@@ -1378,6 +1521,8 @@ func (r *OauthProxy) createHTTPListener(config listenerConfig) (net.Listener, er
 }
 
 // createUpstreamProxy create a reverse http proxy from the upstream.
+//
+//nolint:cyclop
 func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	dialer := (&net.Dialer{
 		KeepAlive: r.Config.UpstreamKeepaliveTimeout,
@@ -1404,43 +1549,36 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	//nolint:gosec
 	tlsConfig := &tls.Config{InsecureSkipVerify: r.Config.SkipUpstreamTLSVerify}
 
-	// are we using a client certificate
-	// @TODO provide a means of reload on the client certificate when it expires. I'm not sure if it's just a
-	// case of update the http transport settings - Also we to place this go-routine?
-	if r.Config.TLSClientCertificate != "" {
-		cert, err := os.ReadFile(r.Config.TLSClientCertificate)
+	// @check if we have a upstream ca to verify the upstream
+	if r.Config.UpstreamCA != "" {
+		r.Log.Info(
+			"loading upstream CA",
+			zap.String("path", r.Config.UpstreamCA),
+		)
+
+		cAuthority, err := os.ReadFile(r.Config.UpstreamCA)
 		if err != nil {
-			r.Log.Error(
-				"unable to read client certificate",
-				zap.String("path", r.Config.TLSClientCertificate),
-				zap.Error(err),
-			)
 			return err
 		}
 
 		pool := x509.NewCertPool()
-		pool.AppendCertsFromPEM(cert)
-		tlsConfig.ClientCAs = pool
-		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		pool.AppendCertsFromPEM(cAuthority)
+		tlsConfig.RootCAs = pool
 	}
 
-	{
-		// @check if we have a upstream ca to verify the upstream
-		if r.Config.UpstreamCA != "" {
-			r.Log.Info(
-				"loading the upstream CA",
-				zap.String("path", r.Config.UpstreamCA),
-			)
+	if r.Config.TLSClientCertificate != "" && r.Config.TLSClientPrivateKey != "" {
+		r.Log.Info(
+			"loading upstream client certificate and private key",
+			zap.String("client cert path", r.Config.TLSClientCertificate),
+			zap.String("client key path", r.Config.TLSClientPrivateKey),
+		)
 
-			cAuthority, err := os.ReadFile(r.Config.UpstreamCA)
-			if err != nil {
-				return err
-			}
-
-			pool := x509.NewCertPool()
-			pool.AppendCertsFromPEM(cAuthority)
-			tlsConfig.RootCAs = pool
+		clientPair, err := encryption.LoadKeyPair(r.Config.TLSClientCertificate, r.Config.TLSClientPrivateKey)
+		if err != nil {
+			return fmt.Errorf("unable to load certificate/private client key pair error: %w", err)
 		}
+
+		tlsConfig.Certificates = []tls.Certificate{*clientPair}
 	}
 
 	// create the forwarding proxy
@@ -1483,6 +1621,10 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		TLSHandshakeTimeout:   r.Config.UpstreamTLSHandshakeTimeout,
 		MaxIdleConns:          r.Config.MaxIdleConns,
 		MaxIdleConnsPerHost:   r.Config.MaxIdleConnsPerHost,
+	}
+
+	if !r.Config.EnableRequestUpstreamCompression {
+		upstreamProxy.Tr.DisableCompression = true
 	}
 
 	return nil
@@ -1570,6 +1712,8 @@ func (r OpenIDRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 
 // newOpenIDProvider initializes the openID configuration, note: the redirection url is deliberately left blank
 // in order to retrieve it from the host header on request.
+//
+//nolint:cyclop
 func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, error) {
 	host := fmt.Sprintf(
 		"%s://%s",
@@ -1587,20 +1731,35 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, err
 		gocloak.SetLegacyWildFlySupport()(client)
 	}
 
-	if r.Config.OpenIDProviderCA != "" {
+	if r.Config.TLSOpenIDProviderCACertificate != "" {
 		r.Log.Info(
 			"loading the IDP CA",
-			zap.String("path", r.Config.OpenIDProviderCA),
+			zap.String("path", r.Config.TLSOpenIDProviderCACertificate),
 		)
 
-		cAuthority, err := os.ReadFile(r.Config.OpenIDProviderCA)
+		pool, err := encryption.LoadCert(r.Config.TLSOpenIDProviderCACertificate)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Join(apperrors.ErrLoadIDPCA, err)
+		}
+		tlsConfig.RootCAs = pool
+	}
+
+	if r.Config.TLSOpenIDProviderClientCertificate != "" && r.Config.TLSOpenIDProviderClientPrivateKey != "" {
+		r.Log.Info(
+			"loading the IDP client key pair",
+			zap.String("client_cert", r.Config.TLSOpenIDProviderClientCertificate),
+			zap.String("client_key", r.Config.TLSOpenIDProviderClientPrivateKey),
+		)
+
+		clientKeyPair, err := encryption.LoadKeyPair(
+			r.Config.TLSOpenIDProviderClientCertificate,
+			r.Config.TLSOpenIDProviderClientPrivateKey,
+		)
+		if err != nil {
+			return nil, nil, errors.Join(apperrors.ErrLoadIDPClientKeyPair, err)
 		}
 
-		pool := x509.NewCertPool()
-		pool.AppendCertsFromPEM(cAuthority)
-		tlsConfig.RootCAs = pool
+		tlsConfig.Certificates = []tls.Certificate{*clientKeyPair}
 	}
 
 	restyClient := client.RestyClient()

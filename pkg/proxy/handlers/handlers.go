@@ -116,6 +116,7 @@ func RetrieveIDToken(
 	forceEncryptedCookie bool,
 	encryptionKey string,
 	req *http.Request,
+	enableOptionalEncryption bool,
 ) (string, string, error) {
 	var token string
 	var err error
@@ -129,6 +130,9 @@ func RetrieveIDToken(
 	if enableEncryptedToken || forceEncryptedCookie {
 		encrypted = token
 		token, err = encryption.DecodeText(token, encryptionKey)
+		if err != nil && enableOptionalEncryption {
+			return encrypted, encrypted, nil
+		}
 	}
 
 	return token, encrypted, err
@@ -182,6 +186,7 @@ func GetRedirectionURL(
 	cookieOAuthStateName string,
 	withOAuthURI func(string) string,
 	noState bool,
+	enableXForwardedHeaders bool,
 ) func(wrt http.ResponseWriter, req *http.Request) string {
 	return func(wrt http.ResponseWriter, req *http.Request) string {
 		var redirect string
@@ -191,7 +196,7 @@ func GetRedirectionURL(
 			var scheme string
 			var host string
 
-			if noProxy && !noRedirects {
+			if (noProxy && !noRedirects) || enableXForwardedHeaders {
 				scheme = req.Header.Get(constant.HeaderXForwardedProto)
 				host = req.Header.Get(constant.HeaderXForwardedHost)
 			} else {

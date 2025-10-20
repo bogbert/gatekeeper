@@ -2,9 +2,13 @@ package storage
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/url"
 	"time"
+
+	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 )
 
 // storage is used to hold the offline refresh token, assuming you don't want to use
@@ -21,24 +25,40 @@ type Storage interface {
 	// Close is used to close off any resources
 	Close() error
 	GetRefreshTokenFromStore(ctx context.Context, token string) (string, error)
+	Test(ctx context.Context) error
 }
 
 // createStorage creates the store client for use.
-func CreateStorage(location string) (Storage, error) {
-	var store Storage
-	var err error
-
+func CreateStorage(location string, highAvail bool, caPool *x509.CertPool, keyPair *tls.Certificate) (Storage, error) {
 	uri, err := url.Parse(location)
 	if err != nil {
 		return nil, err
 	}
 
 	switch uri.Scheme {
-	case "redis":
-		store, err = newRedisStore(location)
-	default:
-		return nil, fmt.Errorf("unsupport store: %s", uri.Scheme)
-	}
+	case constant.RedisScheme:
+		builder, err := newRedisStoreBuilder(location, highAvail)
+		if err != nil {
+			return nil, err
+		}
 
-	return store, err
+		return builder.Build(), nil
+	case constant.TLSRedisScheme:
+		builder, err := newRedisStoreBuilder(location, highAvail)
+		if err != nil {
+			return nil, err
+		}
+
+		if caPool != nil {
+			builder.WithCACert(caPool)
+		}
+
+		if keyPair != nil {
+			builder.WithClientCert(keyPair)
+		}
+
+		return builder.Build(), nil
+	default:
+		return nil, fmt.Errorf("unsupported store: %s", uri.Scheme)
+	}
 }

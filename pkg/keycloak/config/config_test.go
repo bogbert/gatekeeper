@@ -141,15 +141,17 @@ func TestIsConfig(t *testing.T) {
 		},
 		{
 			Config: &Config{
-				Listen:              ":8080",
-				DiscoveryURL:        "http://127.0.0.1:8080",
-				ClientID:            "client",
-				ClientSecret:        "client",
-				RedirectionURL:      "http://120.0.0.1",
-				Upstream:            "http://120.0.0.1",
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 50,
-				TLSMinVersion:       constant.TLS12,
+				Listen:               ":8080",
+				DiscoveryURL:         "http://127.0.0.1:8080",
+				ClientID:             "client",
+				ClientSecret:         "client",
+				RedirectionURL:       "http://120.0.0.1",
+				Upstream:             "http://120.0.0.1",
+				MaxIdleConns:         100,
+				MaxIdleConnsPerHost:  50,
+				TLSMinVersion:        constant.TLS12,
+				EnableLogoutAuth:     true,
+				EnableLogoutRedirect: true,
 			},
 			Ok: true,
 		},
@@ -241,16 +243,18 @@ func TestIsConfig(t *testing.T) {
 		},
 		{
 			Config: &Config{
-				Listen:              ":8080",
-				DiscoveryURL:        "http://127.0.0.1:8080",
-				ClientID:            "client",
-				ClientSecret:        "client",
-				RedirectionURL:      "https://120.0.0.1",
-				Upstream:            "http://someupstream",
-				SecureCookie:        true,
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 50,
-				TLSMinVersion:       constant.TLS13,
+				Listen:               ":8080",
+				DiscoveryURL:         "http://127.0.0.1:8080",
+				ClientID:             "client",
+				ClientSecret:         "client",
+				RedirectionURL:       "https://120.0.0.1",
+				Upstream:             "http://someupstream",
+				SecureCookie:         true,
+				MaxIdleConns:         100,
+				MaxIdleConnsPerHost:  50,
+				TLSMinVersion:        constant.TLS13,
+				EnableLogoutAuth:     true,
+				EnableLogoutRedirect: true,
 			},
 			Ok: true,
 		},
@@ -386,8 +390,8 @@ func TestIsOpenIDProviderProxyValid(t *testing.T) {
 		{
 			Name: "InValidSkipOpenIDProviderTLSVerifyWithIDPCA",
 			Config: &Config{
-				OpenIDProviderCA:            "somefile",
-				SkipOpenIDProviderTLSVerify: true,
+				TLSOpenIDProviderCACertificate: "somefile",
+				SkipOpenIDProviderTLSVerify:    true,
 			},
 			Valid: false,
 		},
@@ -532,16 +536,21 @@ func TestIsSameSiteValid(t *testing.T) {
 	}
 }
 
-//nolint:cyclop
+//nolint:cyclop, funlen
 func TestIsTLSFilesValid(t *testing.T) {
 	testCases := []struct {
-		Name                       string
-		Config                     *Config
-		Valid                      bool
-		TLSCertificateExists       bool
-		TLSClientCertificateExists bool
-		TLSPrivateKeyExists        bool
-		TLSCaCertificateExists     bool
+		Name                             string
+		Config                           *Config
+		Valid                            bool
+		TLSCertificateExists             bool
+		TLSClientCACertificateExists     bool
+		TLSPrivateKeyExists              bool
+		TLSClientCertificateExists       bool
+		TLSClientPrivateKeyExists        bool
+		TLSStoreClientCertificateExists  bool
+		TLSStorePrivateKeyExists         bool
+		TLSForwardingCACertificateExists bool
+		TLSForwardingCAPrivateKeyExists  bool
 	}{
 		{
 			Name: "ValidPrivateAndCertificate",
@@ -551,11 +560,11 @@ func TestIsTLSFilesValid(t *testing.T) {
 				//nolint:gosec
 				TLSPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_priv_%d", rand.IntN(10000)),
 			},
-			Valid:                      true,
-			TLSCertificateExists:       true,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        true,
-			TLSCaCertificateExists:     false,
+			Valid:                        true,
+			TLSCertificateExists:         true,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          true,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "InValidMissingPrivateFile",
@@ -565,11 +574,11 @@ func TestIsTLSFilesValid(t *testing.T) {
 				//nolint:gosec
 				TLSPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_priv_%d", rand.IntN(10000)),
 			},
-			Valid:                      false,
-			TLSCertificateExists:       true,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     false,
+			Valid:                        false,
+			TLSCertificateExists:         true,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "InValidMissingPrivate",
@@ -578,11 +587,11 @@ func TestIsTLSFilesValid(t *testing.T) {
 				TLSCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_crt_%d", rand.IntN(10000)),
 				TLSPrivateKey:  "",
 			},
-			Valid:                      false,
-			TLSCertificateExists:       true,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     false,
+			Valid:                        false,
+			TLSCertificateExists:         true,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "InValidMissingCertificateFile",
@@ -592,11 +601,11 @@ func TestIsTLSFilesValid(t *testing.T) {
 				//nolint:gosec
 				TLSPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_priv_%d", rand.IntN(10000)),
 			},
-			Valid:                      false,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        true,
-			TLSCaCertificateExists:     false,
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          true,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "InValidMissingCertificate",
@@ -605,11 +614,11 @@ func TestIsTLSFilesValid(t *testing.T) {
 				//nolint:gosec
 				TLSPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_priv_%d", rand.IntN(10000)),
 			},
-			Valid:                      false,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        true,
-			TLSCaCertificateExists:     false,
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          true,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "InValidMissingPrivateAndCertificateFile",
@@ -619,59 +628,180 @@ func TestIsTLSFilesValid(t *testing.T) {
 				//nolint:gosec
 				TLSPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_priv_%d", rand.IntN(10000)),
 			},
-			Valid:                      false,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     false,
-		},
-		{
-			Name: "ValidCaCertificate",
-			Config: &Config{
-				//nolint:gosec
-				TLSCaCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_ca_%d", rand.IntN(10000)),
-			},
-			Valid:                      true,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     true,
-		},
-		{
-			Name: "InValidMissingCaCertificateFile",
-			Config: &Config{
-				//nolint:gosec
-				TLSCaCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_ca_%d", rand.IntN(10000)),
-			},
-			Valid:                      false,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     false,
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "ValidClientCertificate",
 			Config: &Config{
 				//nolint:gosec
 				TLSClientCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+				//nolint:gosec
+				TLSClientPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
 			},
-			Valid:                      true,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: true,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     false,
+			Valid:                        true,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   true,
+			TLSClientPrivateKeyExists:    true,
+		},
+		{
+			Name: "InValidMissingClientCertificateFile",
+			Config: &Config{
+				//nolint:gosec
+				TLSClientCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_ca_%d", rand.IntN(10000)),
+			},
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
+		},
+		{
+			Name: "ValidClientCACertificate",
+			Config: &Config{
+				//nolint:gosec
+				TLSClientCACertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+			},
+			Valid:                        true,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: true,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
 		},
 		{
 			Name: "InvalidValidMissingClientCertificate",
 			Config: &Config{
 				//nolint:gosec
-				TLSClientCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+				TLSClientCACertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
 			},
-			Valid:                      false,
-			TLSCertificateExists:       false,
-			TLSClientCertificateExists: false,
-			TLSPrivateKeyExists:        false,
-			TLSCaCertificateExists:     false,
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
+		},
+		{
+			Name: "InvalidValidMissingStoreClientCertificate",
+			Config: &Config{
+				//nolint:gosec
+				TLSStoreClientCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+			},
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
+		},
+		{
+			Name: "InvalidValidMissingStoreClientPrivateKey",
+			Config: &Config{
+				//nolint:gosec
+				TLSStoreClientPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+			},
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
+		},
+		{
+			Name: "InvalidMissingPairStoreClientCertificate",
+			Config: &Config{
+				//nolint:gosec
+				TLSStoreClientCertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+			},
+			Valid:                           false,
+			TLSCertificateExists:            false,
+			TLSClientCACertificateExists:    false,
+			TLSPrivateKeyExists:             false,
+			TLSClientCertificateExists:      false,
+			TLSStoreClientCertificateExists: true,
+		},
+		{
+			Name: "InvalidMissingPairStoreClientPrivateKey",
+			Config: &Config{
+				//nolint:gosec
+				TLSStoreClientPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_client_%d", rand.IntN(10000)),
+			},
+			Valid:                        false,
+			TLSCertificateExists:         false,
+			TLSClientCACertificateExists: false,
+			TLSPrivateKeyExists:          false,
+			TLSClientCertificateExists:   false,
+			TLSStorePrivateKeyExists:     true,
+		},
+		{
+			Name: "InvalidValidMissingForwardingCACertificate",
+			Config: &Config{
+				//nolint:gosec
+				TLSForwardingCACertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_fwd_%d", rand.IntN(10000)),
+			},
+			Valid:                            false,
+			TLSCertificateExists:             false,
+			TLSClientCACertificateExists:     false,
+			TLSPrivateKeyExists:              false,
+			TLSClientCertificateExists:       false,
+			TLSForwardingCACertificateExists: false,
+		},
+		{
+			Name: "InvalidValidMissingForwardingCAPrivateKey",
+			Config: &Config{
+				//nolint:gosec
+				TLSForwardingCAPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_fwd_%d", rand.IntN(10000)),
+			},
+			Valid:                           false,
+			TLSCertificateExists:            false,
+			TLSClientCACertificateExists:    false,
+			TLSPrivateKeyExists:             false,
+			TLSClientCertificateExists:      false,
+			TLSForwardingCAPrivateKeyExists: false,
+		},
+		{
+			Name: "InvalidMissingPairForwardingCACertificate",
+			Config: &Config{
+				//nolint:gosec
+				TLSForwardingCACertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_fwd_%d", rand.IntN(10000)),
+			},
+			Valid:                            false,
+			TLSCertificateExists:             false,
+			TLSClientCACertificateExists:     false,
+			TLSPrivateKeyExists:              false,
+			TLSClientCertificateExists:       false,
+			TLSForwardingCACertificateExists: true,
+		},
+		{
+			Name: "InvalidMissingPairForwardingCAPrivateKey",
+			Config: &Config{
+				//nolint:gosec
+				TLSForwardingCAPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_fwd_%d", rand.IntN(10000)),
+			},
+			Valid:                           false,
+			TLSCertificateExists:            false,
+			TLSClientCACertificateExists:    false,
+			TLSPrivateKeyExists:             false,
+			TLSClientCertificateExists:      false,
+			TLSForwardingCAPrivateKeyExists: true,
+		},
+		{
+			Name: "ValidForwardingCAPair",
+			Config: &Config{
+				//nolint:gosec
+				TLSForwardingCACertificate: fmt.Sprintf(os.TempDir()+"/gateconfig_fwd_%d", rand.IntN(10000)),
+				//nolint:gosec
+				TLSForwardingCAPrivateKey: fmt.Sprintf(os.TempDir()+"/gateconfig_fwd_%d", rand.IntN(10000)),
+			},
+			Valid:                            true,
+			TLSCertificateExists:             false,
+			TLSClientCACertificateExists:     false,
+			TLSPrivateKeyExists:              false,
+			TLSClientCertificateExists:       false,
+			TLSForwardingCACertificateExists: true,
+			TLSForwardingCAPrivateKeyExists:  true,
 		},
 	}
 
@@ -681,24 +811,50 @@ func TestIsTLSFilesValid(t *testing.T) {
 			func(t *testing.T) {
 				certFile := ""
 				clientCertFile := ""
+				clientPrivKeyFile := ""
 				privFile := ""
-				caFile := ""
+				clientCAFile := ""
+				fwdCACertFile := ""
+				fwdCAPrivFile := ""
+				storeClientCertFile := ""
+				storeClientPrivFile := ""
+
 				cfg := testCase.Config
 
 				if cfg.TLSCertificate != "" {
 					certFile = cfg.TLSCertificate
 				}
 
-				if cfg.TLSClientCertificate != "" {
-					clientCertFile = cfg.TLSClientCertificate
+				if cfg.TLSClientCACertificate != "" {
+					clientCAFile = cfg.TLSClientCACertificate
 				}
 
 				if cfg.TLSPrivateKey != "" {
 					privFile = cfg.TLSPrivateKey
 				}
 
-				if cfg.TLSCaCertificate != "" {
-					caFile = cfg.TLSCaCertificate
+				if cfg.TLSClientCertificate != "" {
+					clientCertFile = cfg.TLSClientCertificate
+				}
+
+				if cfg.TLSClientPrivateKey != "" {
+					clientPrivKeyFile = cfg.TLSClientPrivateKey
+				}
+
+				if cfg.TLSForwardingCACertificate != "" {
+					fwdCACertFile = cfg.TLSForwardingCACertificate
+				}
+
+				if cfg.TLSForwardingCAPrivateKey != "" {
+					fwdCAPrivFile = cfg.TLSForwardingCAPrivateKey
+				}
+
+				if cfg.TLSStoreClientCertificate != "" {
+					storeClientCertFile = cfg.TLSStoreClientCertificate
+				}
+
+				if cfg.TLSStoreClientPrivateKey != "" {
+					storeClientPrivFile = cfg.TLSStoreClientPrivateKey
 				}
 
 				if certFile != "" && testCase.TLSCertificateExists {
@@ -713,12 +869,12 @@ func TestIsTLSFilesValid(t *testing.T) {
 					defer os.Remove(certFile)
 				}
 
-				if clientCertFile != "" && testCase.TLSClientCertificateExists {
-					err := os.WriteFile(clientCertFile, []byte(""), 0o600)
+				if clientCAFile != "" && testCase.TLSClientCACertificateExists {
+					err := os.WriteFile(clientCAFile, []byte(""), 0o600)
 					if err != nil {
-						t.Fatalf("Problem writing certificate %s", err)
+						t.Fatalf("Problem writing client CA certificate %s", err)
 					}
-					defer os.Remove(certFile)
+					defer os.Remove(clientCAFile)
 				}
 
 				if privFile != "" && testCase.TLSPrivateKeyExists {
@@ -729,12 +885,52 @@ func TestIsTLSFilesValid(t *testing.T) {
 					defer os.Remove(privFile)
 				}
 
-				if caFile != "" && testCase.TLSCaCertificateExists {
-					err := os.WriteFile(caFile, []byte(""), 0o600)
+				if clientCertFile != "" && testCase.TLSClientCertificateExists {
+					err := os.WriteFile(clientCertFile, []byte(""), 0o600)
 					if err != nil {
-						t.Fatalf("Problem writing cacertificate %s", err)
+						t.Fatalf("Problem writing client certificate %s", err)
 					}
-					defer os.Remove(caFile)
+					defer os.Remove(clientCertFile)
+				}
+
+				if clientPrivKeyFile != "" && testCase.TLSClientPrivateKeyExists {
+					err := os.WriteFile(clientPrivKeyFile, []byte(""), 0o600)
+					if err != nil {
+						t.Fatalf("Problem writing client private key %s", err)
+					}
+					defer os.Remove(clientPrivKeyFile)
+				}
+
+				if fwdCACertFile != "" && testCase.TLSForwardingCACertificateExists {
+					err := os.WriteFile(fwdCACertFile, []byte(""), 0o600)
+					if err != nil {
+						t.Fatalf("Problem writing forwarding CA certificate %s", err)
+					}
+					defer os.Remove(fwdCACertFile)
+				}
+
+				if fwdCAPrivFile != "" && testCase.TLSForwardingCAPrivateKeyExists {
+					err := os.WriteFile(fwdCAPrivFile, []byte(""), 0o600)
+					if err != nil {
+						t.Fatalf("Problem writing forwarding CA private key %s", err)
+					}
+					defer os.Remove(fwdCAPrivFile)
+				}
+
+				if storeClientCertFile != "" && testCase.TLSStoreClientCertificateExists {
+					err := os.WriteFile(storeClientCertFile, []byte(""), 0o600)
+					if err != nil {
+						t.Fatalf("Problem writing store client certificate %s", err)
+					}
+					defer os.Remove(storeClientCertFile)
+				}
+
+				if storeClientPrivFile != "" && testCase.TLSStorePrivateKeyExists {
+					err := os.WriteFile(storeClientPrivFile, []byte(""), 0o600)
+					if err != nil {
+						t.Fatalf("Problem writing store client privateKey %s", err)
+					}
+					defer os.Remove(storeClientPrivFile)
 				}
 
 				err := testCase.Config.isTLSFilesValid()
@@ -760,7 +956,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 		TLSAdminCertificateExists       bool
 		TLSAdminClientCertificateExists bool
 		TLSAdminPrivateKeyExists        bool
-		TLSAdminCaCertificateExists     bool
+		TLSAdminClientCACertificate     bool
 	}{
 		{
 			Name: "ValidPrivateAndCertificate",
@@ -774,7 +970,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 			TLSAdminCertificateExists:       true,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        true,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "InValidMissingPrivateFile",
@@ -788,7 +984,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 			TLSAdminCertificateExists:       true,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "InValidMissingPrivate",
@@ -801,7 +997,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 			TLSAdminCertificateExists:       true,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "InValidMissingCertificateFile",
@@ -815,7 +1011,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        true,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "InValidMissingCertificate",
@@ -828,7 +1024,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        true,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "InValidMissingPrivateAndCertificateFile",
@@ -842,55 +1038,55 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "ValidCaCertificate",
 			Config: &Config{
 				//nolint:gosec
-				TLSAdminCaCertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_ca_%d", rand.IntN(10000)),
+				TLSAdminClientCACertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_ca_%d", rand.IntN(10000)),
 			},
 			Valid:                           true,
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     true,
+			TLSAdminClientCACertificate:     true,
 		},
 		{
-			Name: "InValidMissingCaCertificateFile",
+			Name: "InValidMissingCACertificateFile",
 			Config: &Config{
 				//nolint:gosec
-				TLSAdminCaCertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_ca_%d", rand.IntN(10000)),
+				TLSAdminClientCACertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_ca_%d", rand.IntN(10000)),
 			},
 			Valid:                           false,
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
-			Name: "ValidClientCertificate",
+			Name: "ValidClientCACertificate",
 			Config: &Config{
 				//nolint:gosec
-				TLSAdminClientCertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_client_%d", rand.IntN(10000)),
+				TLSAdminClientCACertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_client_%d", rand.IntN(10000)),
 			},
 			Valid:                           true,
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: true,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 		{
 			Name: "InvalidValidMissingClientCertificate",
 			Config: &Config{
 				//nolint:gosec
-				TLSAdminClientCertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_client_%d", rand.IntN(10000)),
+				TLSAdminClientCACertificate: fmt.Sprintf(os.TempDir()+"/gateadminconfig_client_%d", rand.IntN(10000)),
 			},
 			Valid:                           false,
 			TLSAdminCertificateExists:       false,
 			TLSAdminClientCertificateExists: false,
 			TLSAdminPrivateKeyExists:        false,
-			TLSAdminCaCertificateExists:     false,
+			TLSAdminClientCACertificate:     false,
 		},
 	}
 
@@ -908,16 +1104,16 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 					certFile = cfg.TLSAdminCertificate
 				}
 
-				if cfg.TLSAdminClientCertificate != "" {
-					clientCertFile = cfg.TLSAdminClientCertificate
+				if cfg.TLSAdminClientCACertificate != "" {
+					clientCertFile = cfg.TLSAdminClientCACertificate
 				}
 
 				if cfg.TLSAdminPrivateKey != "" {
 					privFile = cfg.TLSAdminPrivateKey
 				}
 
-				if cfg.TLSAdminCaCertificate != "" {
-					caFile = cfg.TLSAdminCaCertificate
+				if cfg.TLSAdminClientCACertificate != "" {
+					caFile = cfg.TLSAdminClientCACertificate
 				}
 
 				if certFile != "" && testCase.TLSAdminCertificateExists {
@@ -944,7 +1140,7 @@ func TestIsAdminTLSFilesValid(t *testing.T) {
 					defer os.Remove(privFile)
 				}
 
-				if caFile != "" && testCase.TLSAdminCaCertificateExists {
+				if caFile != "" && testCase.TLSAdminClientCACertificate {
 					err := os.WriteFile(caFile, []byte(""), 0o600)
 					if err != nil {
 						t.Fatalf("Problem writing cacertificate %s", err)
@@ -1121,6 +1317,7 @@ func TestIsReverseProxySettingsValid(t *testing.T) {
 				ClientID:         "some-client",
 				DiscoveryURL:     "https://somediscoveryurl",
 				Upstream:         "https://test.com",
+				EnableLogoutAuth: true,
 			},
 			Valid: true,
 		},
@@ -1131,6 +1328,7 @@ func TestIsReverseProxySettingsValid(t *testing.T) {
 				PatRetryCount:         5,
 				PatRetryInterval:      2 * time.Second,
 				OpenIDProviderTimeout: 30 * time.Second,
+				EnableLogoutAuth:      true,
 			},
 			Valid: true,
 		},
@@ -1141,6 +1339,7 @@ func TestIsReverseProxySettingsValid(t *testing.T) {
 				ClientID:         "some-client",
 				DiscoveryURL:     "https://somediscoveryurl",
 				Upstream:         "",
+				EnableLogoutAuth: true,
 			},
 			Valid: false,
 		},
@@ -1792,6 +1991,57 @@ func TestIsStoreURLValid(t *testing.T) {
 				StoreURL: "kwoie",
 			},
 			Valid: false,
+		},
+		{
+			Name: "StoreURLMissing",
+			Config: &Config{
+				StoreURL:      "",
+				EnableStoreHA: true,
+			},
+			Valid: false,
+		},
+		{
+			Name: "ValidEnableHA",
+			Config: &Config{
+				StoreURL:      "redis://user:secret@localhost:6379/4?protocol=3",
+				EnableStoreHA: true,
+			},
+			Valid: true,
+		},
+		{
+			Name: "TLSStoreURLMissingCAPresent",
+			Config: &Config{
+				StoreURL:              "redis://127.0.0.1:6450",
+				TLSStoreCACertificate: "pathtoca.pem",
+			},
+			Valid: false,
+		},
+		{
+			Name: "TLSStoreURLPresentCAMissing",
+			Config: &Config{
+				StoreURL:              "rediss://127.0.0.1:6450",
+				TLSStoreCACertificate: "",
+			},
+			Valid: false,
+		},
+		{
+			Name: "TLSStoreURLMissingClientPairPresent",
+			Config: &Config{
+				StoreURL:                  "redis://127.0.0.1:6450",
+				TLSStoreClientCertificate: "pathtocert",
+				TLSStoreClientPrivateKey:  "pathtokey",
+			},
+			Valid: false,
+		},
+		{
+			Name: "ValidTLSStoreURLClientPair",
+			Config: &Config{
+				StoreURL:                  "rediss://127.0.0.1:6450",
+				TLSStoreClientCertificate: "pathtocert",
+				TLSStoreClientPrivateKey:  "pathtokey",
+				TLSStoreCACertificate:     "pathtoca.pem",
+			},
+			Valid: true,
 		},
 	}
 
@@ -2674,6 +2924,270 @@ func TestIsCookiePathValid(t *testing.T) {
 			testCase.Name,
 			func(t *testing.T) {
 				err := testCase.Config.isCookieValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestIsSigningValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidSigning",
+			Config: &Config{
+				EnableSigning: true,
+				NoProxy:       false,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidSigningNoProxyTrue",
+			Config: &Config{
+				EnableSigning: true,
+				NoProxy:       true,
+			},
+			Valid: false,
+		},
+		{
+			Name: "InvalidSigningForwardingTrue",
+			Config: &Config{
+				EnableSigning:    true,
+				EnableForwarding: true,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isSigningValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestEnableSigningHmacValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidSigningHmac",
+			Config: &Config{
+				EnableSigningHmac: true,
+				EncryptionKey:     "test",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidSigninghmac",
+			Config: &Config{
+				EnableSigningHmac: true,
+				EncryptionKey:     "",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableSigningHmacValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestEnableXForwardedHeadersValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidEnableXForwardedHeadersValid",
+			Config: &Config{
+				EnableXForwardedHeaders: true,
+				RedirectionURL:          "",
+			},
+			Valid: true,
+		},
+		{
+			Name: "ValidDisabledEnableXForwardedHeadersValid",
+			Config: &Config{
+				EnableXForwardedHeaders: false,
+				RedirectionURL:          "",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidEnableXForwardedHeaders",
+			Config: &Config{
+				EnableXForwardedHeaders: true,
+				RedirectionURL:          "http://someurl",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableXForwardedHeadersValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestEnableOptionalEncryptionValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidEnableOptionalEncryptionValid",
+			Config: &Config{
+				EnableOptionalEncryption: true,
+				EnableEncryptedToken:     true,
+				ForceEncryptedCookie:     false,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidEnableOptionalEncryption",
+			Config: &Config{
+				EnableOptionalEncryption: true,
+				EnableEncryptedToken:     false,
+				ForceEncryptedCookie:     false,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableOptionalEncryptionValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestEnableLogoutAuthValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidEnableLogoutAuthValid",
+			Config: &Config{
+				EnableLogoutAuth:     true,
+				EnableLogoutRedirect: true,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidEnableLogoutAuthValid",
+			Config: &Config{
+				EnableLogoutAuth:     false,
+				EnableLogoutRedirect: false,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableLogoutAuthValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestIsEnableRequestUpstreamCompressionValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidEnableRequestUpstreamCompressionValid",
+			Config: &Config{
+				EnableRequestUpstreamCompression: true,
+				EnableCompression:                false,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidEnableRequestUpstreamCompressionValid",
+			Config: &Config{
+				EnableRequestUpstreamCompression: false,
+				EnableCompression:                true,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableRequestUpstreamCompressionValid()
 				if err != nil && testCase.Valid {
 					t.Fatalf("Expected test not to fail")
 				}

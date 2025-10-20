@@ -143,7 +143,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 
 	for idx := range requests {
 		reqCfg := requests[idx]
-		var upstream fakeUpstreamResponse
+		var upstream FakeUpstreamResponse
 
 		f.config.NoRedirects = !reqCfg.Redirects
 		f.config.SkipAccessTokenClientIDCheck = reqCfg.SkipClientIDCheck
@@ -694,12 +694,13 @@ func newFakeKeycloakConfig() *config.Config {
 		EnableTokenHeader:           true,
 		EnableCompression:           false,
 		EnableMetrics:               false,
+		EnableLogoutAuth:            true,
 		Listen:                      randomLocalHost,
 		ListenAdmin:                 "",
 		ListenAdminScheme:           "http",
 		TLSAdminCertificate:         "",
 		TLSAdminPrivateKey:          "",
-		TLSAdminCaCertificate:       "",
+		TLSAdminClientCACertificate: "",
 		OAuthURI:                    "/oauth",
 		OpenIDProviderTimeout:       DefaultOpenIDProviderTimeout,
 		SkipOpenIDProviderTLSVerify: false,

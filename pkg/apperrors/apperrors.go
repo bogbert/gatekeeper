@@ -5,6 +5,7 @@ import (
 )
 
 var (
+	ErrFailedToParseCert               = errors.New("failed to parse certificates")
 	ErrAssertionFailed                 = errors.New("assertion failed")
 	ErrPermissionNotInToken            = errors.New("permissions missing in token")
 	ErrResourceRetrieve                = errors.New("problem getting resources from IDP")
@@ -32,8 +33,8 @@ var (
 	ErrDefaultDenyWhitelistConflict   = errors.New("you've asked for a default denial but whitelisted everything")
 	ErrDefaultDenyUserDefinedConflict = errors.New("you've enabled default deny " +
 		"and at the same time defined own rules for /*")
-	ErrBadDiscoveryURIFormat     = errors.New("bad discovery url format")
-	ErrForwardAuthMissingHeaders = errors.New("seems you are using gatekeeper as forward-auth, " +
+	ErrBadDiscoveryURIFormat    = errors.New("bad discovery url format")
+	ErrMissingXForwardedHeaders = errors.New("seems you are using gatekeeper forward-auth or enable-x-forwarded-headers," +
 		"but you don't forward X-FORWARDED-* headers from front proxy")
 	ErrPKCEWithCodeOnly         = errors.New("pkce can be enabled only with no-redirect=false")
 	ErrPKCECodeCreation         = errors.New("creation of code verifier failed")
@@ -86,6 +87,14 @@ var (
 	ErrStartMainHTTP     = errors.New("failed to start main http service")
 	ErrStartRedirectHTTP = errors.New("failed to start http redirect service")
 	ErrStartAdminHTTP    = errors.New("failed to start admin service")
+
+	ErrRedisConnection           = errors.New("failed connection to redis")
+	ErrRedisConnectionTestFailed = errors.New("connection test to redis failed")
+	ErrLoadStoreCA               = errors.New("problem loading store CA certificate")
+	ErrLoadStoreClientPair       = errors.New("problem loading store client certificate/key pair")
+	ErrCreateStore               = errors.New("problem creating store")
+	ErrLoadIDPCA                 = errors.New("problem loading IDP CA certificate")
+	ErrLoadIDPClientKeyPair      = errors.New("problem loading IDP client key pair")
 
 	// config errors.
 
@@ -175,8 +184,47 @@ var (
 	ErrCertSelfNoHostname    = errors.New("no hostnames specified")
 	ErrCertSelfLowExpiration = errors.New("expiration must be greater then 5 minutes")
 
-	ErrLetsEncryptMissingCacheDir = errors.New("letsencrypt cache dir has not been set")
-	ErrHijackerMethodMissing      = errors.New("writer does not implement http.Hijacker method")
-	ErrInvalidOriginWithCreds     = errors.New("origin cannot be set to * together with AllowedCredentials true")
-	ErrInvalidCookiePath          = errors.New("cookie path must begin with /")
+	ErrLetsEncryptMissingCacheDir          = errors.New("letsencrypt cache dir has not been set")
+	ErrHijackerMethodMissing               = errors.New("writer does not implement http.Hijacker method")
+	ErrInvalidOriginWithCreds              = errors.New("origin cannot be set to * together with AllowedCredentials true")
+	ErrInvalidCookiePath                   = errors.New("cookie path must begin with /")
+	ErrMissingStoreURL                     = errors.New("missing store url")
+	ErrInvalidStoreURL                     = errors.New("store url is invalid for non-HA client")
+	ErrInvalidHAStoreURL                   = errors.New("store url is invalid for HA client")
+	ErrTLSStoreURLCAMissing                = errors.New("store url is TLS but CA missing")
+	ErrCATLSStoreURLMissing                = errors.New("CA present, store url non-TLS")
+	ErrClientCertTLSStoreURLMissing        = errors.New("store client certificate present, store url non-TLS")
+	ErrClientPrivKeyTLSStoreURLMissing     = errors.New("store client private key present, store url non-TLS")
+	ErrTLSCertificateNotExists             = errors.New("tls server certificate, file does not exist")
+	ErrTLSPrivateKeyNotExists              = errors.New("tls server private key, file does not exist")
+	ErrTLSClientCertificateNotExists       = errors.New("tls client certificate, file does not exist")
+	ErrTLSClientPrivateKeyNotExists        = errors.New("tls client private key, file does not exist")
+	ErrTLSClientCACertificateNotExists     = errors.New("tls client CA certificate, file does not exist")
+	ErrTLSForwardingCACertificateNotExists = errors.New("tls forwarding CA certificate, file does not exist")
+	ErrTLSForwardingCAPrivateKeyNotExists  = errors.New("tls forwarding CA private key, file does not exist")
+	ErrTLSStoreCACertificateNotExists      = errors.New("tls store ca certificate, file does not exist")
+	ErrTLSClientPairMissing                = errors.New("tls client auth, you must supply both client private key " +
+		"and client certificate for client authentication")
+	ErrTLSForwardingCAPairMissing = errors.New("tls forwarding CA, you must supply both CA private key " +
+		"and CA certificate for generating forwarding proxy MITM server certificates")
+	ErrTLSStoreClientCertificateNotExists = errors.New("tls store client certificate file does not exist")
+	ErrTLSStoreClientPrivateKeyNotExists  = errors.New("tls store client private key file does not exist")
+	ErrTLSStoreClientPairMissing          = errors.New("tls store, you must supply both client private key " +
+		"and client certificate for client authentication")
+	ErrTLSOpenIDPCACertificateNotExists     = errors.New("tls openidp ca certificate, file does not exist")
+	ErrTLSOpenIDPClientCertificateNotExists = errors.New("tls openidp client certificate file does not exist")
+	ErrTLSOpenIDPClientPrivateKeyNotExists  = errors.New("tls openidp client private key file does not exist")
+	ErrTLSOpenIDPClientPairMissing          = errors.New("tls openidp, you must supply both client private key " +
+		"and client certificate for client authentication")
+	ErrSigningNoProxy                  = errors.New("sign in no proxy mode is not possible")
+	ErrSigningNotWithForwarding        = errors.New("signing and forwarding cannot be enabled at the same time")
+	ErrSigningHmacMissingEncryptionKey = errors.New("signing with hmac enabled but encryption key missing")
+	ErrXForwardedRedirectionURL        = errors.New("enable-x-forwarded-headers and redirection-url " +
+		"cannot be set at the same time")
+	ErrOptionalEncryptionWithNoEncryption = errors.New("optional encryption cannot be enabled " +
+		"when encryption is not enabled")
+	ErrDisableAuthLogout = errors.New("you can disable authentication only when " +
+		"enable-logout-redirect is enabled")
+	ErrEnableRequestUpstreamCompression = errors.New("you cannot enable compression " +
+		"and disable request upstream compression")
 )

@@ -96,7 +96,7 @@ func authorizationMiddleware(
 					if noProxy {
 						xForwardedMethod := req.Header.Get(constant.HeaderXForwardedMethod)
 						if xForwardedMethod == "" {
-							scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
+							scope.Logger.Error(apperrors.ErrMissingXForwardedHeaders.Error())
 							accessForbidden(wrt, req)
 							return
 						}
@@ -109,7 +109,7 @@ func authorizationMiddleware(
 				if noProxy {
 					authzPath = req.Header.Get(constant.HeaderXForwardedURI)
 					if authzPath == "" {
-						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
+						scope.Logger.Error(apperrors.ErrMissingXForwardedHeaders.Error())
 						accessForbidden(wrt, req)
 						return
 					}
@@ -317,6 +317,38 @@ func levelOfAuthenticationMiddleware(
 					defaultAllowedQueryParams,
 				)(wrt, req)
 				return
+			}
+
+			next.ServeHTTP(wrt, req)
+		})
+	}
+}
+
+// signingMiddleware is responsible for signing outbound requests.
+func SigningMiddleware(
+	logger *zap.Logger,
+	pat *PAT,
+	forwardingDomains []string,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		logger.Info("enabling signing middleware")
+
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			var token string
+
+			pat.m.RLock()
+			token = pat.Token.AccessToken
+			pat.m.RUnlock()
+
+			hostname := req.Host
+			xForwardedHost := req.Header.Get(constant.HeaderXForwardedHost)
+			if xForwardedHost != "" {
+				hostname = xForwardedHost
+			}
+
+			// is the host being signed?
+			if len(forwardingDomains) == 0 || utils.ContainsSubString(hostname, forwardingDomains) {
+				req.Header.Set(constant.AuthorizationHeader, "Bearer "+token)
 			}
 
 			next.ServeHTTP(wrt, req)

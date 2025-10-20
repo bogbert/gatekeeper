@@ -19,6 +19,18 @@ builds:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
     main: ./cmd/keycloak/gatekeeper-keycloak.go
     binary: gatekeeper
+  - id: macos-fips
+    goos: [darwin]
+    goarch: [amd64]
+    # Make sure that cgo is disabled. See: https://golang.org/cmd/cgo/
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
+    # Adds some metadata to the build like version, commit reference and the date of the build
+    ldflags:
+      - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
+    main: ./cmd/keycloak/gatekeeper-keycloak.go
+    binary: gatekeeper
 
   - id: linux
     goos: [linux]
@@ -37,6 +49,24 @@ builds:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
     main: ./cmd/keycloak/gatekeeper-keycloak.go
     binary: gatekeeper
+  - id: linux-fips
+    goos: [linux]
+    goarch:
+      - amd64
+      - arm
+      - arm64
+    goarm:
+      - 6
+      - 7
+    # Make sure that cgo is disabled. See: https://golang.org/cmd/cgo/
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
+    # Adds some metadata to the build like version, commit reference and the date of the build
+    ldflags:
+      - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
+    main: ./cmd/keycloak/gatekeeper-keycloak.go
+    binary: gatekeeper
 
   - id: windows
     goos: [windows]
@@ -44,6 +74,18 @@ builds:
     # Make sure that cgo is disabled. See: https://golang.org/cmd/cgo/
     env:
       - CGO_ENABLED=0
+    # Adds some metadata to the build like version, commit reference and the date of the build
+    ldflags:
+      - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
+    main: ./cmd/keycloak/gatekeeper-keycloak.go
+    binary: gatekeeper
+  - id: windows-fips
+    goos: [windows]
+    goarch: [amd64]
+    # Make sure that cgo is disabled. See: https://golang.org/cmd/cgo/
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy/core.compiled={{ .Timestamp }}"
@@ -91,6 +133,27 @@ archives:
     format: tar.gz
   - id: windows
     builds: [windows]
+    # All files will be in a single directory. For example: gatekeeper_0.0.1_linux_amd64
+    wrap_in_directory: true
+    format: zip
+  - id: nix-fips
+    builds: [macos-fips, linux-fips]
+    # Generate the compresed files based on the following templates
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- if eq .Os "darwin" }}macOS{{- else }}{{ .Os }}{{ end }}_
+      {{- .Arch }}{{- .Arm }}_fips
+    # All files will be in a single directory. For example: gatekeeper_0.0.1_linux_amd64
+    wrap_in_directory: true
+    format: tar.gz
+  - id: windows-fips
+    builds: [windows-fips]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      windows_
+      {{- .Arch }}{{- .Arm }}_fips
     # All files will be in a single directory. For example: gatekeeper_0.0.1_linux_amd64
     wrap_in_directory: true
     format: zip
