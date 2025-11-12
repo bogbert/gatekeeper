@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.0"
+          go-version: "1.25.3"
       # Checkout the repository
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,6 +66,7 @@ jobs:
           kubectl apply -f ./e2e/k8s/manifest.yml
       - name: "Deploy Redis"
         run: |
+          sudo apt update
           sudo apt install -y redis
           
           REDIS_DIR=/tmp/redis-standalone
@@ -77,6 +78,7 @@ jobs:
           popd
       - name: "Setup Redis Cluster"
         run: |
+          sudo apt update
           sudo apt install -y redis
           PORT_PREFIX=700
           for NODE_NUM in {0..5}

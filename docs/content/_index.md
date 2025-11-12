@@ -22,7 +22,7 @@ You can view all settings also in this table [Settings](https://gogatekeeper.git
 
 ## Requirements
 
-  - Go 1.24 or higher
+  - Go 1.25 or higher
 
 ## Example, simple setup architecture
 
@@ -530,7 +530,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.0.0
+  image: quay.io/gogatekeeper/gatekeeper:4.3.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -557,7 +557,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.0.0
+  image: quay.io/gogatekeeper/gatekeeper:4.3.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -1157,7 +1157,7 @@ You can specify also connection options in redis URI e.g. `redis://user:password
 In both cases, the refresh token is encrypted before being placed into
 the store.
 
-From version 4.0.0 gatekeeper also supports Redis Cluster HA client.
+From version 4.3.0 gatekeeper also supports Redis Cluster HA client.
 Example of redis cluster URI e.g. `redis://user:password@localhost:6789?dial_timeout=3&read_timeout=6s&addr=localhost:6790&addr=localhost:6791`
 
 Both Redis and also RedisCluster connections support TLS/mTLS, see section [TLS/mTLS](#tlsmtls)
@@ -1460,12 +1460,15 @@ On server side, UMA in no-redirects mode:
 ```
 ## Compression
 
-There are two options related to compression. First is `--enable-compression` enables compression
+There are three options related to compression. First is `--enable-compression` enables compression
 of returned content by gatekeeper. Second is `--enable-request-upstream-compression` which
 is by default `true`. This option asks upstream to compress response by sending header `Accept-Encoding: gzip`.
 Sometimes however you have backend which already does compression by default or used different type of compression
 and you don't want gatekeeper to do any actions on returned content, in that case you can disable both
-`--enable-compression` and also `--enable-request-upstream-compression`.
+`--enable-compression` and also `--enable-request-upstream-compression`. Third option is `--enable-accept-encoding-header`
+you can use this option if you just want to pass `Accept-Encoding` header from client to the upstream, by default this
+options is `false`. It is recommended when using this third option to also match `Accept-Encoding` header in header
+resource field to filter exact values allowed in `Accept-Encoding` header, see [Header Matching](#headers-matching).
 
 ## Request tracing
 

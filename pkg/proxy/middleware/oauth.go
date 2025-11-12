@@ -23,9 +23,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-/*
-	AuthenticationMiddleware is responsible for verifying the access token
-*/
+// AuthenticationMiddleware is responsible for verifying the access token
+//
 //nolint:funlen,cyclop
 func AuthenticationMiddleware(
 	logger *zap.Logger,
@@ -70,6 +69,7 @@ func AuthenticationMiddleware(
 				scope.Logger.Error(err.Error())
 				core.RevokeProxy(logger, req)
 				next.ServeHTTP(wrt, req)
+
 				return
 			}
 
@@ -106,6 +106,7 @@ func AuthenticationMiddleware(
 						zap.Error(err),
 					)
 					accessForbidden(wrt, req)
+
 					return
 				}
 
@@ -124,6 +125,7 @@ func AuthenticationMiddleware(
 						zap.Error(err),
 					)
 					accessForbidden(wrt, req)
+
 					return
 				}
 
@@ -131,6 +133,7 @@ func AuthenticationMiddleware(
 					lLog.Error(apperrors.ErrSessionExpiredRefreshOff.Error())
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
+
 					return
 				}
 
@@ -139,6 +142,7 @@ func AuthenticationMiddleware(
 					lLog.Error(err.Error())
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
+
 					return
 				}
 
@@ -167,11 +171,13 @@ func AuthenticationMiddleware(
 					)
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
+
 					return
 				}
 
 				if encryptionKey != "" {
 					var stdRefreshClaims *jwt.Claims
+
 					stdRefreshClaims, err = utils.ParseRefreshToken(refresh)
 					if err != nil {
 						lLog.Error(
@@ -179,14 +185,17 @@ func AuthenticationMiddleware(
 							zap.Error(err),
 						)
 						accessForbidden(wrt, req)
+
 						return
 					}
+
 					if user.ID != stdRefreshClaims.Subject {
 						lLog.Error(
 							apperrors.ErrAccRefreshTokenMismatch.Error(),
 							zap.Error(err),
 						)
 						accessForbidden(wrt, req)
+
 						return
 					}
 				}
@@ -202,6 +211,7 @@ func AuthenticationMiddleware(
 				// exp: expiration of the access token
 				// expiresIn: expiration of the ID token
 				conf := newOAuth2Config(redirectionURL)
+
 				lLog.Debug(
 					"issuing refresh token request",
 					zap.String("current access token", user.RawToken),
@@ -232,6 +242,7 @@ func AuthenticationMiddleware(
 
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
+
 					return
 				}
 
@@ -264,16 +275,19 @@ func AuthenticationMiddleware(
 				if err != nil {
 					lLog.Error(err.Error())
 					accessForbidden(wrt, req)
+
 					return
 				}
 
 				if enableEncryptedToken || forceEncryptedCookie {
-					if accessToken, err = encryption.EncodeText(accessToken, encryptionKey); err != nil {
+					accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
+					if err != nil {
 						lLog.Error(
 							apperrors.ErrEncryptAccToken.Error(),
 							zap.Error(err),
 						)
 						accessForbidden(wrt, req)
+
 						return
 					}
 				}
@@ -287,7 +301,9 @@ func AuthenticationMiddleware(
 						"renew refresh cookie with new refresh token",
 						zap.Duration("refresh_expires_in", refreshExpiresIn),
 					)
+
 					var encryptedRefreshToken string
+
 					encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
 					if err != nil {
 						lLog.Error(
@@ -295,6 +311,7 @@ func AuthenticationMiddleware(
 							zap.Error(err),
 						)
 						wrt.WriteHeader(http.StatusInternalServerError)
+
 						return
 					}
 
@@ -302,18 +319,22 @@ func AuthenticationMiddleware(
 						go func(ctx context.Context, old string, newToken string, encrypted string) {
 							ctxx, cancel := context.WithCancel(ctx)
 							defer cancel()
-							if err = store.Delete(ctxx, utils.GetHashKey(old)); err != nil {
+
+							err = store.Delete(ctxx, utils.GetHashKey(old))
+							if err != nil {
 								lLog.Error(
 									apperrors.ErrDelTokFromStore.Error(),
 									zap.Error(err),
 								)
 							}
 
-							if err = store.Set(ctxx, utils.GetHashKey(newToken), encrypted, refreshExpiresIn); err != nil {
+							err = store.Set(ctxx, utils.GetHashKey(newToken), encrypted, refreshExpiresIn)
+							if err != nil {
 								lLog.Error(
 									apperrors.ErrSaveTokToStore.Error(),
 									zap.Error(err),
 								)
+
 								return
 							}
 						}(ctx, user.RawToken, newRawAccToken, encryptedRefreshToken)
@@ -333,6 +354,7 @@ func AuthenticationMiddleware(
 					lLog.Error(err.Error())
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
+
 					return
 				}
 
@@ -356,6 +378,7 @@ func AuthenticationMiddleware(
 					scope.Logger.Error(err.Error())
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
+
 					return
 				}
 			}
@@ -396,6 +419,7 @@ func RedirectToAuthorizationMiddleware(
 
 				if len(allowedQueryParams) > 0 {
 					query := ""
+
 					for key, val := range allowedQueryParams {
 						if param := req.URL.Query().Get(key); param != "" {
 							if val != "" {
@@ -403,6 +427,7 @@ func RedirectToAuthorizationMiddleware(
 									wrt.WriteHeader(http.StatusForbidden)
 								}
 							}
+
 							query += fmt.Sprintf("&%s=%s", key, param)
 						} else {
 							if val, ok := defaultAllowedQueryParams[key]; ok {
@@ -410,6 +435,7 @@ func RedirectToAuthorizationMiddleware(
 							}
 						}
 					}
+
 					authQuery += query
 				}
 
@@ -423,6 +449,7 @@ func RedirectToAuthorizationMiddleware(
 						logger.Error(apperrors.ErrMissingXForwardedHeaders.Error())
 
 						wrt.WriteHeader(http.StatusForbidden)
+
 						return
 					}
 
@@ -468,6 +495,7 @@ func NoRedirectToAuthorizationMiddleware(
 				wrt.WriteHeader(http.StatusUnauthorized)
 				return
 			}
+
 			next.ServeHTTP(wrt, req)
 		})
 	}

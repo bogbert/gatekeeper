@@ -33,7 +33,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	redis "github.com/redis/go-redis/v9"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 var _ core.Configs = &Config{}
@@ -198,14 +198,18 @@ type Config struct {
 	EnableOptionalEncryption           bool `env:"ENABLE_OPTIONAL_ENCRYPTION" json:"enable-optional-encryption" usage:"enable optional decryption for access tokens, id tokens, refresh tokens" yaml:"enable-optional-encryption"`
 	EnableLogoutAuth                   bool `env:"ENABLE_LOGOUT_AUTH" json:"enable-logout-auth" usage:"enable authentication on logout handler" yaml:"enable-logout-auth"`
 	EnableRequestUpstreamCompression   bool `env:"ENABLE_REQUEST_UPSTREAM_COMPRESSION" json:"enable-request-upstream-compression" usage:"enables asking upstream for compression, by adding Accept-Encoding: gzip header and decompressing response from upstream" yaml:"enable-request-upstream-compression"`
+	EnableAcceptEncodingHeader         bool `env:"ENABLE_ACCEPT_ENCODING_HEADER" json:"enable-accept-encoding-header" usage:"pass Accept-Encoding header from client to upstream" yaml:"enable-accept-encoding-header"`
 	IsDiscoverURILegacy                bool
 }
 
 func NewDefaultConfig() *Config {
 	var hostnames []string
-	if name, err := os.Hostname(); err == nil {
+
+	name, err := os.Hostname()
+	if err == nil {
 		hostnames = append(hostnames, name)
 	}
+
 	hostnames = append(hostnames, []string{"localhost", "127.0.0.1", "::1"}...)
 
 	return &Config{
@@ -297,7 +301,7 @@ func (r *Config) GetDefaultAllowedQueryParams() map[string]string {
 	return r.DefaultAllowedQueryParams
 }
 
-// readConfigFile reads and parses the configuration file.
+// ReadConfigFile reads and parses the configuration file.
 func (r *Config) ReadConfigFile(filename string) error {
 	content, err := os.ReadFile(filename)
 	if err != nil {
@@ -309,6 +313,7 @@ func (r *Config) ReadConfigFile(filename string) error {
 		//nolint:musttag
 		err = json.Unmarshal(content, r)
 	default:
+		//nolint:musttag
 		err = yaml.Unmarshal(content, r)
 	}
 
@@ -322,7 +327,8 @@ func (r *Config) Update() error {
 	}
 
 	for _, updateFunc := range updateRegistry {
-		if err := updateFunc(); err != nil {
+		err := updateFunc()
+		if err != nil {
 			return err
 		}
 	}
@@ -352,14 +358,18 @@ func (r *Config) IsValid() error {
 		r.isLetsEncryptValid,
 		r.isTLSMinValid,
 		r.isUpstreamProxyValid,
+		r.isOpenIDProviderRetryCountValid,
+		r.isPatRetryCountValid,
 		r.isEnableRequestUpstreamCompressionValid,
+		r.isEnableAcceptEncodingHeaderValid,
 		r.isForwardingProxySettingsValid,
 		r.isReverseProxySettingsValid,
 		r.isCookieValid,
 	}
 
 	for _, validationFunc := range validationRegistry {
-		if err := validationFunc(); err != nil {
+		err := validationFunc()
+		if err != nil {
 			return err
 		}
 	}
@@ -383,6 +393,7 @@ func (r *Config) isListenValid() error {
 	if r.Listen == "" {
 		return apperrors.ErrMissingListenInterface
 	}
+
 	return nil
 }
 
@@ -391,6 +402,7 @@ func (r *Config) isListenAdminSchemeValid() error {
 		r.ListenAdminScheme != constant.UnsecureScheme {
 		return apperrors.ErrAdminListenerScheme
 	}
+
 	return nil
 }
 
@@ -417,6 +429,7 @@ func (r *Config) isMaxIdlleConnValid() error {
 	if r.MaxIdleConnsPerHost < 0 || r.MaxIdleConnsPerHost > r.MaxIdleConns {
 		return apperrors.ErrInvalidMaxIdleConnsPerHost
 	}
+
 	return nil
 }
 
@@ -425,6 +438,7 @@ func (r *Config) isSameSiteValid() error {
 		r.SameSiteCookie != constant.SameSiteLax && r.SameSiteCookie != constant.SameSiteNone {
 		return apperrors.ErrInvalidSameSiteCookie
 	}
+
 	return nil
 }
 
@@ -559,6 +573,7 @@ func (r *Config) isLetsEncryptValid() error {
 	if r.UseLetsEncrypt && r.LetsEncryptCacheDir == "" {
 		return apperrors.ErrMissingLetsEncryptCacheDir
 	}
+
 	return nil
 }
 
@@ -571,15 +586,18 @@ func (r *Config) isTLSMinValid() error {
 	default:
 		return apperrors.ErrInvalidMinimalTLSVersion
 	}
+
 	return nil
 }
 
 func (r *Config) isUpstreamProxyValid() error {
 	if r.UpstreamProxy != "" {
-		if _, err := url.ParseRequestURI(r.UpstreamProxy); err != nil {
+		_, err := url.ParseRequestURI(r.UpstreamProxy)
+		if err != nil {
 			return fmt.Errorf("the upstream proxy is invalid, %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -594,18 +612,21 @@ func (r *Config) isForwardingProxySettingsValid() error {
 				if r.TLSCertificate != "" {
 					return apperrors.ErrInvalidForwardTLSCertOpt
 				}
+
 				return nil
 			},
 			func() error {
 				if r.TLSPrivateKey != "" {
 					return apperrors.ErrInvalidForwardTLSKeyOpt
 				}
+
 				return nil
 			},
 		}
 
 		for _, validationFunc := range validationRegistry {
-			if err := validationFunc(); err != nil {
+			err := validationFunc()
+			if err != nil {
 				return err
 			}
 		}
@@ -638,7 +659,8 @@ func (r *Config) isReverseProxySettingsValid() error {
 		}
 
 		for _, validationFunc := range validationRegistry {
-			if err := validationFunc(); err != nil {
+			err := validationFunc()
+			if err != nil {
 				return err
 			}
 		}
@@ -665,7 +687,8 @@ func (r *Config) isTokenVerificationSettingsValid() error {
 	}
 
 	for _, validationFunc := range validationRegistry {
-		if err := validationFunc(); err != nil {
+		err := validationFunc()
+		if err != nil {
 			return err
 		}
 	}
@@ -677,6 +700,7 @@ func (r *Config) isNoProxyValid() error {
 	if r.NoProxy && !r.NoRedirects && r.RedirectionURL != "" {
 		return apperrors.ErrRedundantRedirectURIinForwardAuthMode
 	}
+
 	return nil
 }
 
@@ -686,7 +710,8 @@ func (r *Config) isUpstreamValid() error {
 	}
 
 	if !r.NoProxy {
-		if _, err := url.ParseRequestURI(r.Upstream); err != nil {
+		_, err := url.ParseRequestURI(r.Upstream)
+		if err != nil {
 			return fmt.Errorf("the upstream endpoint is invalid, %w", err)
 		}
 	}
@@ -702,6 +727,7 @@ func (r *Config) isClientIDValid() error {
 	if r.ClientID == "" {
 		return apperrors.ErrMissingClientID
 	}
+
 	return nil
 }
 
@@ -709,6 +735,7 @@ func (r *Config) isDiscoveryURLValid() error {
 	if r.DiscoveryURL == "" {
 		return apperrors.ErrMissingDiscoveryURI
 	}
+
 	return nil
 }
 
@@ -717,6 +744,7 @@ func (r *Config) isForwardingGrantValid() error {
 		if r.ForwardingUsername == "" {
 			return apperrors.ErrMissingForwardUser
 		}
+
 		if r.ForwardingPassword == "" {
 			return apperrors.ErrMissingForwardPass
 		}
@@ -748,6 +776,7 @@ func (r *Config) isSecurityFilterValid() error {
 			return nil
 		}
 	}
+
 	return nil
 }
 
@@ -804,11 +833,13 @@ func (r *Config) isStoreURLValid() error {
 		}
 
 		if r.EnableStoreHA {
-			if _, err := redis.ParseClusterURL(r.StoreURL); err != nil {
+			_, err := redis.ParseClusterURL(r.StoreURL)
+			if err != nil {
 				return errors.Join(apperrors.ErrInvalidHAStoreURL, err)
 			}
 		} else {
-			if _, err := redis.ParseURL(r.StoreURL); err != nil {
+			_, err := redis.ParseURL(r.StoreURL)
+			if err != nil {
 				return errors.Join(apperrors.ErrInvalidStoreURL, err)
 			}
 		}
@@ -832,7 +863,8 @@ func (r *Config) isResourceValid() error {
 
 	// check: ensure each of the resource are valid
 	for _, resource := range r.Resources {
-		if err := resource.Valid(); err != nil {
+		err := resource.Valid()
+		if err != nil {
 			return err
 		}
 
@@ -851,12 +883,13 @@ func (r *Config) isResourceValid() error {
 
 func (r *Config) isMatchClaimValid() error {
 	// step: validate the claims are validate regex's
-	for k, claim := range r.MatchClaims {
-		if _, err := regexp.Compile(claim); err != nil {
+	for claim, claimVal := range r.MatchClaims {
+		_, err := regexp.Compile(claimVal)
+		if err != nil {
 			return fmt.Errorf(
 				"the claim matcher: %s for claim: %s is not a valid regex",
+				claimVal,
 				claim,
-				k,
 			)
 		}
 	}
@@ -873,6 +906,7 @@ func (r *Config) isExternalAuthzValid() error {
 		if r.ClientID == "" || r.ClientSecret == "" {
 			return apperrors.ErrMissingClientCredsWithUMA
 		}
+
 		if r.EnableIDPSessionCheck && r.NoRedirects {
 			return apperrors.ErrEnableUmaIdpSessionCheckConflict
 		}
@@ -892,6 +926,7 @@ func (r *Config) isDefaultDenyValid() error {
 	if r.EnableDefaultDeny && r.EnableDefaultDenyStrict {
 		return apperrors.ErrTooManyDefaultDenyOpts
 	}
+
 	return nil
 }
 
@@ -954,6 +989,7 @@ func (r *Config) isPKCEValid() error {
 	if r.NoRedirects && r.EnablePKCE {
 		return apperrors.ErrPKCEWithCodeOnly
 	}
+
 	return nil
 }
 
@@ -961,15 +997,18 @@ func (r *Config) isPostLoginRedirectValid() error {
 	if r.PostLoginRedirectPath != "" && r.NoRedirects {
 		return apperrors.ErrPostLoginRedirectPathNoRedirectsInvalid
 	}
+
 	if r.PostLoginRedirectPath != "" {
 		parsedURI, err := url.ParseRequestURI(r.PostLoginRedirectPath)
 		if err != nil {
 			return err
 		}
+
 		if parsedURI.Host != "" || parsedURI.Scheme != "" {
 			return apperrors.ErrInvalidPostLoginRedirectPath
 		}
 	}
+
 	return nil
 }
 
@@ -977,6 +1016,7 @@ func (r *Config) isEnableHmacValid() error {
 	if r.EnableHmac && r.EncryptionKey == "" {
 		return apperrors.ErrHmacRequiresEncKey
 	}
+
 	return nil
 }
 
@@ -984,6 +1024,7 @@ func (r *Config) isPostLogoutRedirectURIValid() error {
 	if r.PostLogoutRedirectURI != "" && !r.EnableIDTokenCookie {
 		return apperrors.ErrPostLogoutRedirectURIRequiresIDToken
 	}
+
 	return nil
 }
 
@@ -991,21 +1032,26 @@ func (r *Config) isAllowedQueryParamsValid() error {
 	if (len(r.AllowedQueryParams) > 0 || len(r.DefaultAllowedQueryParams) > 0) && r.NoRedirects {
 		return apperrors.ErrAllowedQueryParamsWithNoRedirects
 	}
+
 	if len(r.DefaultAllowedQueryParams) > len(r.AllowedQueryParams) {
 		return apperrors.ErrTooManyDefaultAllowedQueryParams
 	}
+
 	for k, val := range r.DefaultAllowedQueryParams {
 		if val == "" {
 			return apperrors.ErrDefaultAllowedQueryParamEmpty
 		}
+
 		allowedVal, ok := r.AllowedQueryParams[k]
 		if !ok {
 			return apperrors.ErrMissingDefaultQueryParamInAllowed
 		}
+
 		if allowedVal != "" && val != allowedVal {
 			return apperrors.ErrDefaultQueryParamNotAllowed
 		}
 	}
+
 	return nil
 }
 
@@ -1013,9 +1059,11 @@ func (r *Config) isEnableLoAValid() error {
 	if r.EnableLoA && r.NoRedirects {
 		return apperrors.ErrLoAWithNoRedirects
 	}
+
 	if r.EnableLoA && r.EnableUma {
 		return apperrors.ErrLoaWithUMA
 	}
+
 	return nil
 }
 
@@ -1025,6 +1073,7 @@ func (r *Config) isCorsValid() error {
 			return apperrors.ErrInvalidOriginWithCreds
 		}
 	}
+
 	return nil
 }
 
@@ -1034,6 +1083,7 @@ func (r *Config) isCookieValid() error {
 			return apperrors.ErrInvalidCookiePath
 		}
 	}
+
 	return nil
 }
 
@@ -1041,9 +1091,11 @@ func (r *Config) isSigningValid() error {
 	if r.EnableSigning && r.NoProxy {
 		return apperrors.ErrSigningNoProxy
 	}
+
 	if r.EnableSigning && r.EnableForwarding {
 		return apperrors.ErrSigningNotWithForwarding
 	}
+
 	return nil
 }
 
@@ -1051,6 +1103,7 @@ func (r *Config) isEnableSigningHmacValid() error {
 	if r.EnableSigningHmac && r.EncryptionKey == "" {
 		return apperrors.ErrSigningHmacMissingEncryptionKey
 	}
+
 	return nil
 }
 
@@ -1058,6 +1111,7 @@ func (r *Config) isEnableXForwardedHeadersValid() error {
 	if r.EnableXForwardedHeaders && r.RedirectionURL != "" {
 		return apperrors.ErrXForwardedRedirectionURL
 	}
+
 	return nil
 }
 
@@ -1065,6 +1119,7 @@ func (r *Config) isEnableOptionalEncryptionValid() error {
 	if r.EnableOptionalEncryption && !r.EnableEncryptedToken && !r.ForceEncryptedCookie {
 		return apperrors.ErrOptionalEncryptionWithNoEncryption
 	}
+
 	return nil
 }
 
@@ -1072,6 +1127,7 @@ func (r *Config) isEnableLogoutAuthValid() error {
 	if !r.EnableLogoutAuth && !r.EnableLogoutRedirect {
 		return apperrors.ErrDisableAuthLogout
 	}
+
 	return nil
 }
 
@@ -1079,5 +1135,30 @@ func (r *Config) isEnableRequestUpstreamCompressionValid() error {
 	if !r.EnableRequestUpstreamCompression && r.EnableCompression {
 		return apperrors.ErrEnableRequestUpstreamCompression
 	}
+
+	return nil
+}
+
+func (r *Config) isEnableAcceptEncodingHeaderValid() error {
+	if r.EnableAcceptEncodingHeader && r.EnableCompression {
+		return apperrors.ErrEnableRequestUpstreamCompression
+	}
+
+	return nil
+}
+
+func (r *Config) isOpenIDProviderRetryCountValid() error {
+	if r.OpenIDProviderRetryCount <= 0 {
+		return apperrors.ErrNegativeOpenIDProviderRetryCount
+	}
+
+	return nil
+}
+
+func (r *Config) isPatRetryCountValid() error {
+	if r.PatRetryCount <= 0 {
+		return apperrors.ErrNegativeisPatRetryCount
+	}
+
 	return nil
 }

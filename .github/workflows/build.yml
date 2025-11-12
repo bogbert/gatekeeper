@@ -10,7 +10,7 @@ jobs:
     # Test the latest release of Go
     strategy:
       matrix:
-        go: ["1.24"]
+        go: ["1.25"]
     steps:
       # Setup the workflow to use the specific version of Go
       - name: Set up Go 1.x
@@ -37,6 +37,7 @@ jobs:
           kubectl apply -f ./e2e/k8s/manifest.yml
       - name: "Deploy Redis"
         run: |
+          sudo apt update
           sudo apt install -y redis
 
           REDIS_DIR=/tmp/redis-standalone
@@ -48,6 +49,7 @@ jobs:
           popd
       - name: "Setup Redis Cluster"
         run: |
+          sudo apt update
           sudo apt install -y redis
           PORT_PREFIX=700
           for NODE_NUM in {0..5}
@@ -74,6 +76,7 @@ jobs:
               -a 2aD6FgewLV
       - name: "Run Tests"
         run: |
+          kubectl get pods -A
           go test -v -timeout=30m -race -coverprofile=profile.cov ./...
       # Run Go benchmarks
       - name: Benchmark
@@ -86,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ["1.24"]
+        go: ["1.25"]
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -96,7 +99,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.0.2
+          version: v2.5.0
           args: "--timeout=3m"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Check Golang sources with Aligo

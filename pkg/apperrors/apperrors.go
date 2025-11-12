@@ -153,7 +153,7 @@ var (
 		"the security filter must be switch on for this feature: hostnames",
 	)
 	ErrMissingEncryptionKey = errors.New(
-		"you have not specified an encryption key for encoding the access token",
+		"you have not specified an encryption key for access token encryption",
 	)
 	ErrMissingEncryptionKeyForRefreshTokens = errors.New(
 		"enable refresh tokens requires encryption key to be defined",
@@ -225,6 +225,10 @@ var (
 		"when encryption is not enabled")
 	ErrDisableAuthLogout = errors.New("you can disable authentication only when " +
 		"enable-logout-redirect is enabled")
-	ErrEnableRequestUpstreamCompression = errors.New("you cannot enable compression " +
+	ErrEnableRequestUpstreamCompression = errors.New("cannot enable compression " +
 		"and disable request upstream compression")
+	ErrEnableAcceptEncodingHeaderWithCompression = errors.New("cannot enable both compression " +
+		"and accept-encoding header")
+	ErrNegativeOpenIDProviderRetryCount = errors.New("openidprovider retry count must be greater than zero")
+	ErrNegativeisPatRetryCount          = errors.New("pat retry count must be greater than zero")
 )

@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"slices"
 	"syscall"
 	"time"
 
@@ -34,7 +35,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// newOauthProxyApp creates a new cli application and runs it
+// NewOauthProxyApp creates a new cli application and runs it
 //
 //nolint:cyclop
 func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](provider T) *cli.App {
@@ -59,7 +60,8 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 		configFile := cliCx.String("config")
 		// step: do we have a configuration file?
 		if configFile != "" {
-			if err := cfg.ReadConfigFile(configFile); err != nil {
+			err := cfg.ReadConfigFile(configFile)
+			if err != nil {
 				return utils.PrintError(
 					"unable to read the configuration file: %s, error: %s",
 					configFile,
@@ -69,12 +71,14 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 		}
 
 		// step: parse the command line options
-		if err := parseCLIOptions(cliCx, cfg); err != nil {
+		err := parseCLIOptions(cliCx, cfg)
+		if err != nil {
 			return utils.PrintError(err.Error())
 		}
 
 		// step: validate the configuration
-		if err := cfg.IsValid(); err != nil {
+		err = cfg.IsValid()
+		if err != nil {
 			return utils.PrintError(err.Error())
 		}
 
@@ -86,10 +90,14 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 
 		// step: start the service
 		var errGroupCtx context.Context
-		if errGroupCtx, err = proxy.Run(); err != nil {
-			if errShut := proxy.Shutdown(); errShut != nil {
+
+		errGroupCtx, err = proxy.Run()
+		if err != nil {
+			errShut := proxy.Shutdown()
+			if errShut != nil {
 				err = errors.Join(err, errShut)
 			}
+
 			return utils.PrintError(err.Error())
 		}
 
@@ -99,11 +107,13 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 
 		select {
 		case <-errGroupCtx.Done():
-			if err := proxy.Shutdown(); err != nil {
+			err := proxy.Shutdown()
+			if err != nil {
 				return utils.PrintError(err.Error())
 			}
 		case <-signalChannel:
-			if err := proxy.Shutdown(); err != nil {
+			err := proxy.Shutdown()
+			if err != nil {
 				return utils.PrintError(err.Error())
 			}
 		}
@@ -121,6 +131,7 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 //nolint:cyclop
 func getCommandLineOptions(cfg core.Configs) []cli.Flag {
 	var flags []cli.Flag
+
 	count := reflect.TypeOf(cfg).Elem().NumField()
 
 	for i := range count {
@@ -210,7 +221,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		field := reflect.TypeOf(config).Elem().Field(i)
 		name := field.Tag.Get("yaml")
 
-		if utils.ContainedIn(name, ignoredOptions) {
+		if slices.Contains(ignoredOptions, name) {
 			continue
 		}
 
@@ -241,6 +252,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		if err != nil {
 			return err
 		}
+
 		utils.MergeMaps(config.GetTags(), tags)
 	}
 
@@ -249,6 +261,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		if err != nil {
 			return err
 		}
+
 		utils.MergeMaps(config.GetMatchClaims(), claims)
 	}
 
@@ -257,6 +270,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		if err != nil {
 			return err
 		}
+
 		utils.MergeMaps(config.GetHeaders(), headers)
 	}
 
@@ -265,6 +279,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		if err != nil {
 			return err
 		}
+
 		utils.MergeMaps(config.GetAllowedQueryParams(), headers)
 	}
 
@@ -273,6 +288,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		if err != nil {
 			return err
 		}
+
 		utils.MergeMaps(config.GetDefaultAllowedQueryParams(), headers)
 	}
 
@@ -282,6 +298,7 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 			if err != nil {
 				return fmt.Errorf("invalid resource %s, %w", x, err)
 			}
+
 			config.SetResources(append(config.GetResources(), resource))
 		}
 	}

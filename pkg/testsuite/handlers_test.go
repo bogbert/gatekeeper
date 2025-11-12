@@ -194,6 +194,7 @@ func TestLoginHandler(t *testing.T) {
 
 	for _, testCase := range testCases {
 		cfg := *cfg
+
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -443,6 +444,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: func(t *testing.T, _ *config.Config, rawToken string) bool {
 							t.Helper()
+
 							user, err := session.ExtractIdentity(rawToken)
 							if err != nil {
 								return false
@@ -489,6 +491,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: func(t *testing.T, _ *config.Config, rawToken string) bool {
 							t.Helper()
+
 							user, err := session.ExtractIdentity(rawToken)
 							if err != nil {
 								return false
@@ -514,6 +517,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 
 	for _, testCase := range testCases {
 		cfg := *cfg
+
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -563,6 +567,7 @@ func TestLogoutHandlerBadRequest(t *testing.T) {
 
 	for _, testCase := range testCases {
 		cfg := *cfg
+
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -638,6 +643,7 @@ func TestLogoutHandlerGood(t *testing.T) {
 	for _, testCase := range testCases {
 		cfgCopy := *cfg
 		cfg := &cfgCopy
+
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -653,7 +659,9 @@ func TestLogoutHandlerGood(t *testing.T) {
 func TestSkipOpenIDProviderTLSVerifyLogoutHandler(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.SkipOpenIDProviderTLSVerify = true
+
 	const postLogoutURI = "http://example.com"
+
 	cfg.PostLogoutRedirectURI = postLogoutURI
 	logoutURL := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL)
 	requests := []fakeRequest{
@@ -689,7 +697,9 @@ func TestSkipOpenIDProviderTLSVerifyLogoutHandler(t *testing.T) {
 func TestRevocation(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.RevocationEndpoint = ""
+
 	const postLogoutURI = "http://example.com"
+
 	cfg.PostLogoutRedirectURI = postLogoutURI
 	logoutURL := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL)
 	requests := []fakeRequest{
@@ -722,6 +732,7 @@ func TestTokenHandler(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.NoRedirects = true
 	uri := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.TokenURL)
+
 	goodToken, err := NewTestToken("example").GetToken()
 	if err != nil {
 		t.Fatalf("Error when creating test token %v", err)
@@ -735,6 +746,7 @@ func TestTokenHandler(t *testing.T) {
 			ExpectedCode: http.StatusOK,
 			ExpectedContent: func(body string, _ int) {
 				assert.NotEqual(t, body, goodToken)
+
 				jsonMap := make(map[string]interface{})
 				err := json.Unmarshal([]byte(body), &jsonMap)
 				require.NoError(t, err)
@@ -759,6 +771,7 @@ func TestTokenHandler(t *testing.T) {
 			ExpectedCode:   http.StatusOK,
 			ExpectedContent: func(body string, _ int) {
 				assert.NotEqual(t, body, goodToken)
+
 				jsonMap := make(map[string]interface{})
 				err := json.Unmarshal([]byte(body), &jsonMap)
 				require.NoError(t, err)
@@ -846,6 +859,7 @@ func TestServiceRedirect(t *testing.T) {
 
 	for _, testCase := range testCases {
 		cfg := *cfg
+
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1044,6 +1058,7 @@ func TestAuthorizationURL(t *testing.T) {
 
 	for _, testCase := range testCases {
 		cfg := *cfg
+
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {

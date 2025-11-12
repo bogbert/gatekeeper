@@ -1,3 +1,4 @@
+//nolint:revive
 package utils
 
 import (
@@ -40,6 +41,7 @@ func VerifyToken(
 			SkipExpiryCheck:   true,
 		},
 	)
+
 	_, err := verifier.Verify(ctx, rawToken)
 	if err != nil {
 		return nil, errors.Join(apperrors.ErrTokenSignature, err)
@@ -70,6 +72,7 @@ func ParseRefreshToken(rawRefreshToken string) (*jwt.Claims, error) {
 	}
 
 	stdRefreshClaims := &jwt.Claims{}
+
 	err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
 	if err != nil {
 		return nil, err
@@ -103,6 +106,7 @@ func GetRefreshedToken(
 				time.Duration(0),
 				apperrors.ErrRefreshTokenExpired
 		}
+
 		return jwt.JSONWebToken{},
 			"",
 			"",
@@ -112,6 +116,7 @@ func GetRefreshedToken(
 	}
 
 	taken := time.Since(start).Seconds()
+
 	metrics.OauthTokensMetric.WithLabelValues("renew").Inc()
 	metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 
@@ -136,6 +141,7 @@ func GetRefreshedToken(
 	}
 
 	stdClaims := &jwt.Claims{}
+
 	err = token.UnsafeClaimsWithoutVerification(stdClaims)
 	if err != nil {
 		return jwt.JSONWebToken{},
@@ -147,6 +153,7 @@ func GetRefreshedToken(
 	}
 
 	refreshStdClaims := &jwt.Claims{}
+
 	err = refreshToken.UnsafeClaimsWithoutVerification(refreshStdClaims)
 	if err != nil {
 		return jwt.JSONWebToken{},
@@ -241,6 +248,7 @@ func CheckClaim(
 	}
 
 	lLog.Warn("unexpected error")
+
 	return false
 }
 
@@ -253,9 +261,11 @@ func VerifyOIDCTokens(
 	skipClientIDCheck bool,
 	skipIssuerCheck bool,
 ) (*oidc3.IDToken, *oidc3.IDToken, error) {
-	var oIDToken *oidc3.IDToken
-	var oAccToken *oidc3.IDToken
-	var err error
+	var (
+		oIDToken  *oidc3.IDToken
+		oAccToken *oidc3.IDToken
+		err       error
+	)
 
 	oIDToken, err = VerifyToken(ctx, provider, rawIDToken, clientID, false, false)
 	if err != nil {

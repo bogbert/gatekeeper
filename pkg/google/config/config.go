@@ -32,7 +32,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Config is the configuration for the proxy
@@ -176,9 +176,12 @@ type Config struct {
 
 func NewDefaultConfig() *Config {
 	var hostnames []string
-	if name, err := os.Hostname(); err == nil {
+
+	name, err := os.Hostname()
+	if err == nil {
 		hostnames = append(hostnames, name)
 	}
+
 	hostnames = append(hostnames, []string{"localhost", "127.0.0.1", "::1"}...)
 
 	return &Config{
@@ -265,7 +268,7 @@ func (r *Config) GetDefaultAllowedQueryParams() map[string]string {
 	return r.DefaultAllowedQueryParams
 }
 
-// readConfigFile reads and parses the configuration file.
+// ReadConfigFile reads and parses the configuration file.
 func (r *Config) ReadConfigFile(filename string) error {
 	content, err := os.ReadFile(filename)
 	if err != nil {
@@ -277,6 +280,7 @@ func (r *Config) ReadConfigFile(filename string) error {
 		//nolint:musttag
 		err = json.Unmarshal(content, r)
 	default:
+		//nolint:musttag
 		err = yaml.Unmarshal(content, r)
 	}
 
@@ -290,7 +294,8 @@ func (r *Config) Update() error {
 	}
 
 	for _, updateFunc := range updateRegistry {
-		if err := updateFunc(); err != nil {
+		err := updateFunc()
+		if err != nil {
 			return err
 		}
 	}
@@ -323,7 +328,8 @@ func (r *Config) IsValid() error {
 	}
 
 	for _, validationFunc := range validationRegistry {
-		if err := validationFunc(); err != nil {
+		err := validationFunc()
+		if err != nil {
 			return err
 		}
 	}
@@ -347,6 +353,7 @@ func (r *Config) isListenValid() error {
 	if r.Listen == "" {
 		return errors.New("you have not specified the listening interface")
 	}
+
 	return nil
 }
 
@@ -355,6 +362,7 @@ func (r *Config) isListenAdminSchemeValid() error {
 		r.ListenAdminScheme != constant.UnsecureScheme {
 		return errors.New("scheme for admin listener must be one of [http, https]")
 	}
+
 	return nil
 }
 
@@ -376,10 +384,10 @@ func (r *Config) isMaxIdlleConnValid() error {
 
 	if r.MaxIdleConnsPerHost < 0 || r.MaxIdleConnsPerHost > r.MaxIdleConns {
 		return errors.New(
-			"maxi-idle-connections-per-host must be a " +
-				"number > 0 and <= max-idle-connections",
+			"maxi-idle-connections-per-host must be a number > 0 and <= max-idle-connections",
 		)
 	}
+
 	return nil
 }
 
@@ -388,6 +396,7 @@ func (r *Config) isSameSiteValid() error {
 		r.SameSiteCookie != constant.SameSiteLax && r.SameSiteCookie != constant.SameSiteNone {
 		return errors.New("same-site-cookie must be one of Strict|Lax|None")
 	}
+
 	return nil
 }
 
@@ -473,6 +482,7 @@ func (r *Config) isLetsEncryptValid() error {
 	if r.UseLetsEncrypt && r.LetsEncryptCacheDir == "" {
 		return apperrors.ErrLetsEncryptMissingCacheDir
 	}
+
 	return nil
 }
 
@@ -485,6 +495,7 @@ func (r *Config) isTLSMinValid() error {
 	default:
 		return apperrors.ErrInvalidMinimalTLSVersion
 	}
+
 	return nil
 }
 
@@ -500,6 +511,7 @@ func (r *Config) isForwardingProxySettingsValid() error {
 						"tls-certificate, use tls-ca-certificate instead",
 					)
 				}
+
 				return nil
 			},
 			func() error {
@@ -508,12 +520,14 @@ func (r *Config) isForwardingProxySettingsValid() error {
 						"tls-private-key, use tls-ca-key instead",
 					)
 				}
+
 				return nil
 			},
 		}
 
 		for _, validationFunc := range validationRegistry {
-			if err := validationFunc(); err != nil {
+			err := validationFunc()
+			if err != nil {
 				return err
 			}
 		}
@@ -536,7 +550,8 @@ func (r *Config) isReverseProxySettingsValid() error {
 		}
 
 		for _, validationFunc := range validationRegistry {
-			if err := validationFunc(); err != nil {
+			err := validationFunc()
+			if err != nil {
 				return err
 			}
 		}
@@ -563,7 +578,8 @@ func (r *Config) isTokenVerificationSettingsValid() error {
 	}
 
 	for _, validationFunc := range validationRegistry {
-		if err := validationFunc(); err != nil {
+		err := validationFunc()
+		if err != nil {
 			return err
 		}
 	}
@@ -578,6 +594,7 @@ func (r *Config) isNoProxyValid() error {
 			"should not be set, will be composed from X-FORWARDED-* headers",
 		)
 	}
+
 	return nil
 }
 
@@ -587,7 +604,8 @@ func (r *Config) isUpstreamValid() error {
 	}
 
 	if !r.NoProxy {
-		if _, err := url.ParseRequestURI(r.Upstream); err != nil {
+		_, err := url.ParseRequestURI(r.Upstream)
+		if err != nil {
 			return fmt.Errorf("the upstream endpoint is invalid, %w", err)
 		}
 	}
@@ -603,6 +621,7 @@ func (r *Config) isClientIDValid() error {
 	if r.ClientID == "" {
 		return errors.New("you have not specified the client id")
 	}
+
 	return nil
 }
 
@@ -610,6 +629,7 @@ func (r *Config) isDiscoveryURLValid() error {
 	if r.DiscoveryURL == "" {
 		return errors.New("you have not specified the discovery url")
 	}
+
 	return nil
 }
 
@@ -650,6 +670,7 @@ func (r *Config) isSecurityFilterValid() error {
 			return nil
 		}
 	}
+
 	return nil
 }
 
@@ -692,7 +713,8 @@ func (r *Config) isSecureCookieValid() error {
 
 func (r *Config) isStoreURLValid() error {
 	if r.StoreURL != "" {
-		if _, err := url.ParseRequestURI(r.StoreURL); err != nil {
+		_, err := url.ParseRequestURI(r.StoreURL)
+		if err != nil {
 			return fmt.Errorf("the store url is invalid, error: %w", err)
 		}
 	}
@@ -711,7 +733,8 @@ func (r *Config) isResourceValid() error {
 
 	// check: ensure each of the resource are valid
 	for _, resource := range r.Resources {
-		if err := resource.Valid(); err != nil {
+		err := resource.Valid()
+		if err != nil {
 			return err
 		}
 
@@ -730,12 +753,13 @@ func (r *Config) isResourceValid() error {
 
 func (r *Config) isMatchClaimValid() error {
 	// step: validate the claims are validate regex's
-	for k, claim := range r.MatchClaims {
-		if _, err := regexp.Compile(claim); err != nil {
+	for claim, claimVal := range r.MatchClaims {
+		_, err := regexp.Compile(claimVal)
+		if err != nil {
 			return fmt.Errorf(
 				"the claim matcher: %s for claim: %s is not a valid regex",
+				claimVal,
 				claim,
-				k,
 			)
 		}
 	}
@@ -756,6 +780,7 @@ func (r *Config) isExternalAuthzValid() error {
 				"enable uma requires client credentials",
 			)
 		}
+
 		if !r.NoRedirects {
 			return errors.New(
 				"enable-uma requires no-redirects option",
@@ -779,6 +804,7 @@ func (r *Config) isDefaultDenyValid() error {
 			"only one of enable-default-deny/enable-default-deny-strict can be true",
 		)
 	}
+
 	return nil
 }
 
@@ -822,6 +848,7 @@ func (r *Config) extractDiscoveryURIComponents() error {
 	}
 
 	r.Realm = matches[realmIndex]
+
 	return nil
 }
 
@@ -829,5 +856,6 @@ func (r *Config) isPKCEValid() error {
 	if r.NoRedirects && r.EnablePKCE {
 		return apperrors.ErrPKCEWithCodeOnly
 	}
+
 	return nil
 }

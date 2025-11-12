@@ -35,7 +35,7 @@ func GetRefreshTokenFromCookie(req *http.Request, cookieName string) (string, er
 	return token, nil
 }
 
-// getTokenInRequest returns the token from the http request
+// GetTokenInRequest returns the token from the http request
 //
 //nolint:cyclop
 func GetTokenInRequest(
@@ -46,6 +46,7 @@ func GetTokenInRequest(
 ) (string, bool, error) {
 	bearer := true
 	token := ""
+
 	var err error
 
 	if tokenHeader == "" && !skipAuthorizationHeaderIdentity {
@@ -64,16 +65,18 @@ func GetTokenInRequest(
 
 	// step: check for a token in the authorization header
 	if err != nil || skipAuthorizationHeaderIdentity {
-		if token, err = GetTokenInCookie(req, name); err != nil {
+		token, err = GetTokenInCookie(req, name)
+		if err != nil {
 			return token, false, err
 		}
+
 		bearer = false
 	}
 
 	return token, bearer, nil
 }
 
-// getTokenInBearer retrieves a access token from the authorization header.
+// GetTokenInBearer retrieves a access token from the authorization header.
 func GetTokenInBearer(req *http.Request) (string, error) {
 	token := req.Header.Get(constant.AuthorizationHeader)
 	if token == "" {
@@ -81,6 +84,7 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 	}
 
 	items := strings.Split(token, " ")
+
 	numItems := 2
 	if len(items) != numItems {
 		return "", apperrors.ErrInvalidSession
@@ -89,19 +93,21 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 	if items[0] != constant.AuthorizationType {
 		return "", apperrors.ErrSessionNotFound
 	}
+
 	return items[1], nil
 }
 
-// getTokenInHeader retrieves a token from the header.
+// GetTokenInHeader retrieves a token from the header.
 func GetTokenInHeader(req *http.Request, headerName string) (string, error) {
 	token := req.Header.Get(headerName)
 	if token == "" {
 		return "", apperrors.ErrSessionNotFound
 	}
+
 	return token, nil
 }
 
-// getTokenInCookie retrieves the access token from the request cookies.
+// GetTokenInCookie retrieves the access token from the request cookies.
 func GetTokenInCookie(req *http.Request, name string) (string, error) {
 	var token bytes.Buffer
 
@@ -115,6 +121,7 @@ func GetTokenInCookie(req *http.Request, name string) (string, error) {
 		if cookie == nil {
 			break
 		}
+
 		token.WriteString(cookie.Value)
 	}
 
@@ -148,10 +155,13 @@ func GetIdentity(
 
 		if enableEncryptedToken || forceEncryptedCookie && !isBearer {
 			origToken := token
-			if token, err = encryption.DecodeText(token, encKey); err != nil {
+
+			token, err = encryption.DecodeText(token, encKey)
+			if err != nil {
 				if enableOptionalEncryption {
 					return origToken, nil
 				}
+
 				return "", apperrors.ErrDecryption
 			}
 		}
@@ -176,6 +186,7 @@ func ExtractIdentity(rawToken string) (*models.UserContext, error) {
 	}
 
 	jsonMap := make(map[string]interface{})
+
 	err = token.UnsafeClaimsWithoutVerification(&jsonMap)
 	if err != nil {
 		return nil, err
@@ -240,7 +251,7 @@ func ExtractIdentity(rawToken string) (*models.UserContext, error) {
 	}, nil
 }
 
-// retrieveRefreshToken retrieves the refresh token from store or cookie.
+// RetrieveRefreshToken retrieves the refresh token from store or cookie.
 func RetrieveRefreshToken(
 	store storage.Storage,
 	cookieRefreshName string,
@@ -249,8 +260,10 @@ func RetrieveRefreshToken(
 	user *models.UserContext,
 	enableOptionalEncryption bool,
 ) (string, string, error) {
-	var token string
-	var err error
+	var (
+		token string
+		err   error
+	)
 
 	switch store != nil {
 	case true:
@@ -264,6 +277,7 @@ func RetrieveRefreshToken(
 	}
 
 	encrypted := token // returns encrypted, avoids encoding twice
+
 	token, err = encryption.DecodeText(token, encryptionKey)
 	if err != nil && enableOptionalEncryption {
 		return encrypted, encrypted, nil
@@ -283,7 +297,8 @@ func GetAccessCookieExpiration(
 	// refresh token
 	duration := accessTokenDuration
 
-	if ident, err := ExtractIdentity(refresh); err == nil {
+	ident, err := ExtractIdentity(refresh)
+	if err == nil {
 		delta := time.Until(ident.ExpiresAt)
 
 		if delta > 0 {
@@ -327,10 +342,12 @@ func GetCodeFlowTokens(
 
 	if enablePKCE {
 		var err error
+
 		codeVerifier, err = req.Cookie(cookiePKCEName)
 		if err != nil {
 			scope.Logger.Error("problem getting pkce cookie", zap.Error(err))
 			accessForbidden(writer, req)
+
 			return "", "", "", err
 		}
 	}
@@ -345,6 +362,7 @@ func GetCodeFlowTokens(
 	if err != nil {
 		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
 		accessForbidden(writer, req)
+
 		return "", "", "", err
 	}
 
@@ -352,6 +370,7 @@ func GetCodeFlowTokens(
 	if !assertOk {
 		scope.Logger.Error("unable to obtain id token", zap.Error(err))
 		accessForbidden(writer, req)
+
 		return "", "", "", err
 	}
 
@@ -374,6 +393,7 @@ func exchangeAuthenticationCode(
 		if codeVerifierCookie.Value == "" {
 			return nil, apperrors.ErrPKCECookieEmpty
 		}
+
 		authCodeOptions = append(
 			authCodeOptions,
 			oauth2.SetAuthURLParam(pkce.ParamCodeVerifier, codeVerifierCookie.Value),
@@ -386,6 +406,7 @@ func exchangeAuthenticationCode(
 	}
 
 	taken := time.Since(start).Seconds()
+
 	metrics.OauthTokensMetric.WithLabelValues("exchange").Inc()
 	metrics.OauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
 

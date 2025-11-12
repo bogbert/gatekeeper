@@ -48,9 +48,11 @@ func SecurityMiddleware(
 				return
 			}
 
-			if err := secure.Process(wrt, req); err != nil {
+			err := secure.Process(wrt, req)
+			if err != nil {
 				scope.Logger.Warn("failed security middleware", zap.Error(err))
 				accessForbidden(wrt, req)
+
 				return
 			}
 
@@ -78,6 +80,7 @@ func HmacMiddleware(logger *zap.Logger, encKey string) func(http.Handler) http.H
 			if expectedMAC == "" {
 				logger.Debug(apperrors.ErrHmacHeaderEmpty.Error())
 				wrt.WriteHeader(http.StatusBadRequest)
+
 				return
 			}
 
@@ -89,6 +92,7 @@ func HmacMiddleware(logger *zap.Logger, encKey string) func(http.Handler) http.H
 			if reqHmac != expectedMAC {
 				logger.Debug(apperrors.ErrHmacMismatch.Error())
 				wrt.WriteHeader(http.StatusBadRequest)
+
 				return
 			}
 
@@ -106,9 +110,30 @@ func AdmissionMiddleware(
 	matchClaims map[string]string,
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(http.Handler) http.Handler {
+	canonHeaders := make([]string, len(resource.Headers))
+	resourceHeaderVals := make(map[string]bool, len(resource.Headers))
+	resourceRoles := make(map[string]bool, len(resource.Roles))
+	resourceGroups := make(map[string]bool, len(resource.Groups))
+
 	claimMatches := make(map[string]*regexp.Regexp)
 	for k, v := range matchClaims {
 		claimMatches[k] = regexp.MustCompile(v)
+	}
+
+	for idx, resVal := range resource.Headers {
+		resVals := strings.Split(resVal, ":")
+		name := resVals[0]
+		canonName := http.CanonicalHeaderKey(name)
+		canonHeaders[idx] = canonName
+		resourceHeaderVals[resVal] = true
+	}
+
+	for _, role := range resource.Roles {
+		resourceRoles[role] = true
+	}
+
+	for _, group := range resource.Groups {
+		resourceGroups[group] = true
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -119,6 +144,7 @@ func AdmissionMiddleware(
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
+
 			if scope.AccessDenied {
 				next.ServeHTTP(wrt, req)
 				return
@@ -133,51 +159,49 @@ func AdmissionMiddleware(
 			)
 
 			// @step: we need to check the roles
-			if !utils.HasAccess(resource.Roles, user.Roles, !resource.RequireAnyRole) {
+			if !utils.HasAccess(resourceRoles, user.Roles, !resource.RequireAnyRole) {
 				lLog.Warn("access denied, invalid roles",
 					zap.String("roles", resource.GetRoles()))
 				accessForbidden(wrt, req)
+
 				return
 			}
 
 			if len(resource.Headers) > 0 {
-				var reqHeaders []string
-				for _, resVal := range resource.Headers {
-					resVals := strings.Split(resVal, ":")
-					name := resVals[0]
-					canonName := http.CanonicalHeaderKey(name)
+				for _, canonName := range canonHeaders {
 					values, ok := req.Header[canonName]
 					if !ok {
 						lLog.Warn("access denied, invalid headers",
 							zap.String("headers", resource.GetHeaders()))
 						accessForbidden(wrt, req)
+
 						return
 					}
 
 					for _, value := range values {
 						headVal := fmt.Sprintf(
 							"%s:%s",
-							strings.ToLower(name),
+							strings.ToLower(canonName),
 							strings.ToLower(value),
 						)
-						reqHeaders = append(reqHeaders, headVal)
-					}
-				}
 
-				// @step: we need to check the headers
-				if !utils.HasAccess(resource.Headers, reqHeaders, true) {
-					lLog.Warn("access denied, invalid headers",
-						zap.String("headers", resource.GetHeaders()))
-					accessForbidden(wrt, req)
-					return
+						if _, ok := resourceHeaderVals[headVal]; !ok {
+							lLog.Warn("access denied, invalid headers",
+								zap.String("headers", resource.GetHeaders()))
+							accessForbidden(wrt, req)
+
+							return
+						}
+					}
 				}
 			}
 
 			// @step: check if we have any groups, the groups are there
-			if !utils.HasAccess(resource.Groups, user.Groups, false) {
+			if !utils.HasAccess(resourceGroups, user.Groups, false) {
 				lLog.Warn("access denied, invalid groups",
 					zap.String("groups", strings.Join(resource.Groups, ",")))
 				accessForbidden(wrt, req)
+
 				return
 			}
 
