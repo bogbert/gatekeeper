@@ -34,6 +34,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
@@ -55,6 +56,7 @@ func authorizationMiddleware(
 	realm string,
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
+	compressEncryptedTokens bool,
 	encryptionKey string,
 	cookManager *cookie.Manager,
 	enableOpa bool,
@@ -172,7 +174,15 @@ func authorizationMiddleware(
 					if err == nil {
 						umaToken := umaUser.RawToken
 						if enableEncryptedToken || forceEncryptedCookie {
-							umaToken, err = encryption.EncodeText(umaToken, encryptionKey)
+							// START CHANGE
+							if compressEncryptedTokens {
+								// We pass "uma" as the token type for logging purposes
+								umaToken, err = core.CompressAndEncryptToken(scope, umaToken, encryptionKey, "uma", wrt)
+							} else {
+								umaToken, err = encryption.EncodeText(umaToken, encryptionKey)
+							}
+							// END CHANGE
+
 							if err != nil {
 								scope.Logger.Error(err.Error())
 								accessForbidden(wrt, req)

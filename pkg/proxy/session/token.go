@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"github.com/klauspost/compress/zstd"
 	"time"
 
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -139,6 +141,7 @@ func GetIdentity(
 	forceEncryptedCookie bool,
 	enableOptionalEncryption bool,
 	encKey string,
+	compressEncryptedTokens bool,
 ) func(req *http.Request, tokenCookie string, tokenHeader string) (string, error) {
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (string, error) {
 		var isBearer bool
@@ -153,16 +156,34 @@ func GetIdentity(
 			return "", err
 		}
 
-		if enableEncryptedToken || forceEncryptedCookie && !isBearer {
+		// On ne déchiffre/décompresse que si ce n'est PAS un Bearer token (donc c'est un cookie)
+		if (enableEncryptedToken || forceEncryptedCookie) && !isBearer {
 			origToken := token
 
-			token, err = encryption.DecodeText(token, encKey)
-			if err != nil {
-				if enableOptionalEncryption {
-					return origToken, nil
+			if compressEncryptedTokens {
+				// 1. Déchiffrement + Décompression
+				compressedData, err := encryption.DecodeCompressedData(token, encKey)
+				if err != nil {
+					if enableOptionalEncryption {
+						return origToken, nil
+					}
+					return "", apperrors.ErrDecryption
 				}
 
-				return "", apperrors.ErrDecryption
+				// 2. Reconstruction du JWT
+				token, err = decompressRefreshToken(compressedData) // On réutilise cette fonction car c'est aussi un JWT
+				if err != nil {
+					return "", fmt.Errorf("failed to decompress access token: %w", err)
+				}
+			} else {
+				// Comportement legacy (Déchiffrement seul)
+				token, err = encryption.DecodeText(token, encKey)
+				if err != nil {
+					if enableOptionalEncryption {
+						return origToken, nil
+					}
+					return "", apperrors.ErrDecryption
+				}
 			}
 		}
 
@@ -251,7 +272,7 @@ func ExtractIdentity(rawToken string) (*models.UserContext, error) {
 	}, nil
 }
 
-// RetrieveRefreshToken retrieves the refresh token from store or cookie.
+// RetrieveRefreshToken retrieves the refresh token from store or cookie and decompresses it.
 func RetrieveRefreshToken(
 	store storage.Storage,
 	cookieRefreshName string,
@@ -259,6 +280,7 @@ func RetrieveRefreshToken(
 	req *http.Request,
 	user *models.UserContext,
 	enableOptionalEncryption bool,
+	compressEncryptedTokens bool,
 ) (string, string, error) {
 	var (
 		token string
@@ -276,14 +298,139 @@ func RetrieveRefreshToken(
 		return token, "", err
 	}
 
-	encrypted := token // returns encrypted, avoids encoding twice
+	encrypted := token
 
-	token, err = encryption.DecodeText(token, encryptionKey)
-	if err != nil && enableOptionalEncryption {
-		return encrypted, encrypted, nil
+	if compressEncryptedTokens {
+		// decrypt and decompress
+		compressedData, err := encryption.DecodeCompressedData(token, encryptionKey)
+		if err != nil && enableOptionalEncryption {
+			return encrypted, encrypted, nil
+		}
+
+		if err != nil {
+			return "", encrypted, err
+		}
+
+		decompressed, err := decompressRefreshToken(compressedData)
+		if err != nil {
+			return "", encrypted, fmt.Errorf("failed to decompress token: %w", err)
+		}
+
+		return decompressed, encrypted, nil
+	} else {
+		// legacy: decrypt only (no compression)
+		token, err = encryption.DecodeText(token, encryptionKey)
+		if err != nil && enableOptionalEncryption {
+			return encrypted, encrypted, nil
+		}
+
+		return token, encrypted, err
+	}
+}
+
+// decompressRefreshToken decompresses and reconstructs a JWT token
+func decompressRefreshToken(compressed []byte) (string, error) {
+	// check if this looks like JWT format (starts with 3 length prefixes)
+	// we need at least 6 bytes for 3 length prefixes
+	if len(compressed) < 6 {
+		// not JWT format, decompress as-is
+		return decompressSimpleToken(compressed)
 	}
 
-	return token, encrypted, err
+	// try to read the three length prefixes
+	var lengths [3]uint16
+	offset := 0
+
+	for i := 0; i < 3; i++ {
+		if offset+2 > len(compressed) {
+			// not enough data for lengths, fallback
+			return decompressSimpleToken(compressed)
+		}
+
+		err := binary.Read(bytes.NewReader(compressed[offset:offset+2]), binary.BigEndian, &lengths[i])
+		if err != nil {
+			return decompressSimpleToken(compressed)
+		}
+		offset += 2
+	}
+
+	// sanity check: total length should be reasonable
+	totalExpectedSize := int(lengths[0]) + int(lengths[1]) + int(lengths[2])
+	if totalExpectedSize > 10000 || totalExpectedSize < 10 {
+		// unreasonable sizes, probably not JWT format
+		return decompressSimpleToken(compressed)
+	}
+
+	compressibleSize := int(lengths[0]) + int(lengths[1])
+	signatureSize := int(lengths[2])
+
+	// calculate where compressed data ends and signature begins
+	compressedDataStart := 6
+	// we need to find the boundary, signature is at the end (raw)
+	signatureStart := len(compressed) - signatureSize
+
+	if signatureStart <= compressedDataStart {
+		return "", fmt.Errorf("invalid token structure: signature would overlap compressed data")
+	}
+
+	// decompress the header + payload
+	compressedData := compressed[compressedDataStart:signatureStart]
+
+	decoder, err := zstd.NewReader(nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create zstd decoder: %w", err)
+	}
+	defer decoder.Close()
+
+	decompressed, err := decoder.DecodeAll(compressedData, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to decompress: %w", err)
+	}
+
+	// verify decompressed size matches expected
+	if len(decompressed) != compressibleSize {
+		return "", fmt.Errorf("decompressed size mismatch: expected %d, got %d", compressibleSize, len(decompressed))
+	}
+
+	// extract signature
+	signature := compressed[signatureStart:]
+
+	if len(signature) != signatureSize {
+		return "", fmt.Errorf("signature size mismatch: expected %d, got %d", signatureSize, len(signature))
+	}
+
+	// split decompressed data into header and payload
+	var parts []string
+
+	// part 0: header
+	part0 := decompressed[:lengths[0]]
+	parts = append(parts, base64.RawURLEncoding.EncodeToString(part0))
+
+	// part 1: payload
+	part1 := decompressed[lengths[0]:lengths[0]+lengths[1]]
+	parts = append(parts, base64.RawURLEncoding.EncodeToString(part1))
+
+	// part 2: signature (raw, not compressed)
+	parts = append(parts, base64.RawURLEncoding.EncodeToString(signature))
+
+	// reconstruct JWT
+	return strings.Join(parts, "."), nil
+}
+
+// decompressSimpleToken decompresses a non-JWT token
+func decompressSimpleToken(compressed []byte) (string, error) {
+	decoder, err := zstd.NewReader(nil)
+	if err != nil {
+		return "", err
+	}
+	defer decoder.Close()
+
+	decompressed, err := decoder.DecodeAll(compressed, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return string(decompressed), nil
 }
 
 // GetAccessCookieExpiration calculates the expiration of the access token cookie.
