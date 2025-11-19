@@ -100,6 +100,7 @@ func RetrieveIDToken(
 	cookieIDTokenName string,
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
+	compressEncryptedTokens bool,
 	encryptionKey string,
 	req *http.Request,
 	enableOptionalEncryption bool,
@@ -118,9 +119,29 @@ func RetrieveIDToken(
 	if enableEncryptedToken || forceEncryptedCookie {
 		encrypted = token
 
-		token, err = encryption.DecodeText(token, encryptionKey)
-		if err != nil && enableOptionalEncryption {
-			return encrypted, encrypted, nil
+		if compressEncryptedTokens {
+			// 1. Decode base64 + Decrypt AES
+			var compressedData []byte
+			compressedData, err = encryption.DecodeCompressedData(token, encryptionKey)
+
+			if err != nil {
+				if enableOptionalEncryption {
+					return encrypted, encrypted, nil
+				}
+				return "", "", err
+			}
+
+			// 2. Decompress ZSTD + Reconstruct JWT
+			token, err = proxycore.DecompressJWTToken(compressedData)
+			if err != nil {
+				return "", "", err
+			}
+		} else {
+			// Legacy behavior
+			token, err = encryption.DecodeText(token, encryptionKey)
+			if err != nil && enableOptionalEncryption {
+				return encrypted, encrypted, nil
+			}
 		}
 	}
 

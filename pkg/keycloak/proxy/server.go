@@ -437,6 +437,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.ForceEncryptedCookie,
 		r.Config.EnableOptionalEncryption,
 		r.Config.EncryptionKey,
+		r.Config.CompressEncryptedTokens,
 	)
 
 	getRedirectionURL := handlers.GetRedirectionURL(
@@ -544,6 +545,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Cm,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
+		r.Config.CompressEncryptedTokens,
 		r.Config.EncryptionKey,
 		newOAuth2Config,
 		r.Store,
@@ -560,6 +562,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		loginGetRedirectionURL,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
+		r.Config.CompressEncryptedTokens,
 		r.Config.EncryptionKey,
 		r.Config.EnableRefreshTokens,
 		r.Config.EnableIDTokenCookie,
@@ -582,6 +585,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EncryptionKey,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
+		r.Config.CompressEncryptedTokens,
 		r.Config.EnableLogoutRedirect,
 		r.Config.EnableOptionalEncryption,
 		r.Config.EnableLogoutAuth,
@@ -613,6 +617,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableIDTokenCookie,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
+		r.Config.CompressEncryptedTokens,
 		r.Config.EnablePKCE,
 		r.Provider,
 		r.Cm,
@@ -920,6 +925,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				r.Config.Realm,
 				r.Config.EnableEncryptedToken,
 				r.Config.ForceEncryptedCookie,
+				r.Config.CompressEncryptedTokens,
 				r.Config.EncryptionKey,
 				r.Cm,
 				r.Config.EnableOpa,
