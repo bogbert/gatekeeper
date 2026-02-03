@@ -27,7 +27,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"math"
 
 	"github.com/Nerzal/gocloak/v13"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
@@ -188,7 +187,6 @@ func oauthCallbackHandler(
 	enableIDTokenCookie bool,
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
-	compressEncryptedTokens bool,
 	enablePKCE bool,
 	provider *oidc3.Provider,
 	cookManager *cookie.Manager,
@@ -285,11 +283,7 @@ func oauthCallbackHandler(
 
 			oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
 
-                        if compressEncryptedTokens {
-                        	encrypted, err = core.CompressAndEncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
-                        } else {
-                        	encrypted, err = core.EncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
-                        }
+			encrypted, err = core.EncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
 			if err != nil {
 				return
 			}
@@ -368,27 +362,14 @@ func oauthCallbackHandler(
 
 		// step: are we encrypting the access token?
 		if enableEncryptedToken || forceEncryptedCookie {
-			if compressEncryptedTokens {
-				// Compression enabled for Access Token
-				accessToken, err = core.CompressAndEncryptToken(scope, accessToken, encryptionKey, "access", writer)
-				if err != nil {
-					return
-				}
-				// Compression enabled for ID Token
-				identityToken, err = core.CompressAndEncryptToken(scope, identityToken, encryptionKey, "id", writer)
-				if err != nil {
-					return
-				}
-			} else {
-				// Standard behavior
-				accessToken, err = core.EncryptToken(scope, accessToken, encryptionKey, "access", writer)
-				if err != nil {
-					return
-				}
-				identityToken, err = core.EncryptToken(scope, identityToken, encryptionKey, "id", writer)
-				if err != nil {
-					return
-				}
+			accessToken, err = core.EncryptToken(scope, accessToken, encryptionKey, "access", writer)
+			if err != nil {
+				return
+			}
+
+			identityToken, err = core.EncryptToken(scope, identityToken, encryptionKey, "id", writer)
+			if err != nil {
+				return
 			}
 
 			if enableUma && umaError == nil {
@@ -434,7 +415,6 @@ func loginHandler(
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
-	compressEncryptedTokens bool,
 	encryptionKey string,
 	enableRefreshTokens bool,
 	enableIDTokenCookie bool,
@@ -546,41 +526,11 @@ func loginHandler(
 
 			// step: does the response have a refresh token and we do NOT ignore refresh tokens?
 			if enableRefreshTokens && token.RefreshToken != "" {
-				if compressEncryptedTokens {
-					// Compression logic
-					compressedRefresh, err := core.CompressData([]byte(token.RefreshToken))
-					if err != nil {
-						scope.Logger.Error("failed to compress refresh token", zap.Error(err))
-						return http.StatusInternalServerError,
-							errors.Join(apperrors.ErrEncryptRefreshToken, err)
-					}
-
-					// Log stats ONLY inside this block where compressedRefresh exists
-					originalSize := len(token.RefreshToken)
-					compressedSize := len(compressedRefresh)
-					ratio := float64(compressedSize) / float64(originalSize) * 100
-
-					scope.Logger.Debug(
-						"refresh token compression stats",
-						zap.Int("original_size", originalSize),
-						zap.Int("compressed_size", compressedSize),
-						zap.Float64("compression_ratio_percent", math.Round(ratio*100)/100),
-					)
-
-					refreshToken, err = encryption.EncodeCompressedData(compressedRefresh, encryptionKey)
-					if err != nil {
-						scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
-						return http.StatusInternalServerError,
-							errors.Join(apperrors.ErrEncryptRefreshToken, err)
-					}
-				} else {
-					// Legacy logic (No compression)
-					refreshToken, err = encryption.EncodeText(token.RefreshToken, encryptionKey)
-					if err != nil {
-						scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
-						return http.StatusInternalServerError,
-							errors.Join(apperrors.ErrEncryptRefreshToken, err)
-					}
+				refreshToken, err = encryption.EncodeText(token.RefreshToken, encryptionKey)
+				if err != nil {
+					scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
+					return http.StatusInternalServerError, //nolint:wsl_v5
+						errors.Join(apperrors.ErrEncryptRefreshToken, err)
 				}
 
 				// drop in the access token - cookie expiration = access token
@@ -725,7 +675,6 @@ func logoutHandler(
 	encryptionKey string,
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
-	compressEncryptedTokens bool,
 	enableLogoutRedirect bool,
 	enableOptionalEncryption bool,
 	enableLogoutAuth bool,
@@ -772,7 +721,6 @@ func logoutHandler(
 				cookieIDTokenName,
 				enableEncryptedToken,
 				forceEncryptedCookie,
-				compressEncryptedTokens,
 				encryptionKey,
 				req,
 				enableOptionalEncryption,
@@ -826,7 +774,6 @@ func logoutHandler(
 				req,
 				user,
 				enableOptionalEncryption,
-				compressEncryptedTokens,
 			)
 			if err == nil {
 				identityToken = refresh

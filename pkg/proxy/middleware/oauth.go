@@ -43,7 +43,6 @@ func AuthenticationMiddleware(
 	cookMgr *cookie.Manager,
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
-	compressEncryptedTokens bool,
 	encryptionKey string,
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	store storage.Storage,
@@ -164,7 +163,6 @@ func AuthenticationMiddleware(
 					req.WithContext(ctx),
 					user,
 					enableOptionalEncryption,
-					compressEncryptedTokens,
 				)
 				if err != nil {
 					scope.Logger.Error(
@@ -282,12 +280,7 @@ func AuthenticationMiddleware(
 				}
 
 				if enableEncryptedToken || forceEncryptedCookie {
-					if compressEncryptedTokens {
-						accessToken, err = core.CompressAndEncryptToken(scope, accessToken, encryptionKey, "access", wrt)
-					} else {
-						accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
-					}
-
+					accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
 					if err != nil {
 						lLog.Error(
 							apperrors.ErrEncryptAccToken.Error(),
@@ -311,12 +304,7 @@ func AuthenticationMiddleware(
 
 					var encryptedRefreshToken string
 
-					if compressEncryptedTokens {
-						encryptedRefreshToken, err = core.CompressAndEncryptToken(scope, newRefreshToken, encryptionKey, "refresh", wrt)
-					} else {
-						encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
-					}
-
+					encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
 					if err != nil {
 						lLog.Error(
 							apperrors.ErrEncryptRefreshToken.Error(),

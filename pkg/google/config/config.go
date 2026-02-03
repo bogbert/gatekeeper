@@ -136,7 +136,6 @@ type Config struct {
 	EnableDefaultDenyStrict         bool `env:"ENABLE_DEFAULT_DENY_STRICT" json:"enable-default-deny-strict" usage:"enables a default denial on all requests, even valid token is denied unless you create some resources" yaml:"enable-default-deny-strict"`
 	EnableEncryptedToken            bool `env:"ENABLE_ENCRYPTED_TOKEN" json:"enable-encrypted-token" usage:"enable encryption for the access tokens" yaml:"enable-encrypted-token"`
 	ForceEncryptedCookie            bool `env:"FORCE_ENCRYPTED_COOKIE" json:"force-encrypted-cookie" usage:"force encryption for the access tokens in cookies" yaml:"force-encrypted-cookie"`
-	CompressEncryptedTokens         bool `env:"COMPRESS_ENCRYPTED_TOKENS" json:"compress-encrypted-tokens" usage:"compress encrypted tokens" yaml:"compress-encrypted-tokens"`
 	EnableLogging                   bool `env:"ENABLE_LOGGING" json:"enable-logging" usage:"enable http logging of the requests" yaml:"enable-logging"`
 	EnableJSONLogging               bool `env:"ENABLE_JSON_LOGGING" json:"enable-json-logging" usage:"switch on json logging rather than text" yaml:"enable-json-logging"`
 	EnableForwarding                bool `env:"ENABLE_FORWARDING" json:"enable-forwarding" usage:"enables the forwarding proxy mode, signing outbound request" yaml:"enable-forwarding"`
