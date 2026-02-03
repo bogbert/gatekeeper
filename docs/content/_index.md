@@ -335,7 +335,9 @@ To overcome this limitations gatekeeper offers several options:
 
 `--enable-id-token-cookie` - is set by default false, in case you don't need id token, leave it/turn it off
 `--store-url` - this will enable storing of refresh token in redis store, instead of cookies, which saves you some bytes,
-also has some additional effect of raising security on client side as refresh token won't be exposed on client side
+also has some additional effect of raising security on client side as refresh token won't be exposed on client side.
+You can use also RedisCluster HA setup for store, see `--enable-store-ha` option.
+
 
 ## Session-only cookies
 
@@ -530,7 +532,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.3.0
+  image: quay.io/gogatekeeper/gatekeeper:4.4.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -557,7 +559,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.3.0
+  image: quay.io/gogatekeeper/gatekeeper:4.4.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -1151,16 +1153,26 @@ refresh the access token for you. The tokens themselves are kept either
 as an encrypted (`--encryption-key=KEY`) cookie **(cookie name:
 kc-state).** or a store **(still requires encryption key)**.
 
-To enable a local Redis store use `redis://user:secret@localhost:6379/0?protocol=3`.
+To enable a local Redis store use `--store-url=redis://user:secret@localhost:6379/0?protocol=3`.
 See [redis-uri](https://github.com/redis/redis-specifications/blob/master/uri/redis.txt) specification.
-You can specify also connection options in redis URI e.g. `redis://user:password@localhost:6789/3?dial_timeout=3&db=1&read_timeout=6s&max_retries=2`
+You can specify also connection options in redis URI e.g. `--store-url=redis://user:password@localhost:6789/3?dial_timeout=3&db=1&read_timeout=6s&max_retries=2`
 In both cases, the refresh token is encrypted before being placed into
 the store.
 
-From version 4.3.0 gatekeeper also supports Redis Cluster HA client.
-Example of redis cluster URI e.g. `redis://user:password@localhost:6789?dial_timeout=3&read_timeout=6s&addr=localhost:6790&addr=localhost:6791`
+From version 4.0.0 gatekeeper also supports Redis Cluster HA client by using option `--enable-store-ha=true`.
+Example of redis cluster URI e.g. `--store-url=redis://user:password@localhost:6789?dial_timeout=3&read_timeout=6s&addr=localhost:6790&addr=localhost:6791`
 
-Both Redis and also RedisCluster connections support TLS/mTLS, see section [TLS/mTLS](#tlsmtls)
+From version 4.4.0 gatekeeper supports also Redis Sentinel e.g. `--enable-store-ha=true` and `--store-url=redis://user:password@localhost:6789?master_name=mymaster&dial_timeout=3&read_timeout=6s&addr=localhost:6790&addr=localhost:6791&username=user&password=password`.
+
+To enable tls connections for redis you have to specify `--store-url=rediss://...` instead of just plain `--store-url=redis://...` and supply store certificate options:
+
+```yaml
+--tls-store-ca-certificate=xxxx
+--tls-store-client-certificate=xxxx // if you would like to enable mTLS
+--tls-store-client-private-key=xxxxx // if you would like to enable mTLS
+```
+
+Redis, RedisCluster, Redis Sentinel connections support TLS/mTLS, see section [TLS/mTLS](#tlsmtls)
 
 ## Post Login Redirect
 

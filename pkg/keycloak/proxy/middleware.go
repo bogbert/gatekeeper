@@ -25,14 +25,15 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/Nerzal/gocloak/v13"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
+	keycloak_client "github.com/gogatekeeper/gatekeeper/pkg/keycloak/client"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -41,7 +42,7 @@ import (
 /*
 	authorizationMiddleware is responsible for verifying permissions in access_token/uma_token
 */
-//nolint:cyclop
+//nolint:cyclop,funlen
 func authorizationMiddleware(
 	logger *zap.Logger,
 	enableUma bool,
@@ -50,7 +51,7 @@ func authorizationMiddleware(
 	noProxy bool,
 	pat *PAT,
 	oidcProvider *oidc3.Provider,
-	idpClient *gocloak.GoCloak,
+	idpClient *keycloak_client.Client,
 	openIDProviderTimeout time.Duration,
 	realm string,
 	enableEncryptedToken bool,
@@ -64,6 +65,8 @@ func authorizationMiddleware(
 	clientID string,
 	skipClientIDCheck bool,
 	skipIssuerCheck bool,
+	compressedToken bool,
+	compressTokenPool *utils.LimitedBufferPool,
 	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (string, error),
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(http.Handler) http.Handler {
@@ -164,19 +167,37 @@ func authorizationMiddleware(
 						req.Context(),
 						pat,
 						idpClient,
-						realm,
 						authzPath,
 						user,
 						methodScope,
 					)
 					if err == nil {
 						umaToken := umaUser.RawToken
+
 						if enableEncryptedToken || forceEncryptedCookie {
-							umaToken, err = encryption.EncodeText(umaToken, encryptionKey)
-							if err != nil {
-								scope.Logger.Error(err.Error())
-								accessForbidden(wrt, req)
-								return //nolint:wsl_v5
+							if compressedToken {
+								umaToken, err = session.EncryptAndCompressToken(umaToken, encryptionKey, compressTokenPool)
+								if err != nil {
+									scope.Logger.Error(err.Error())
+									accessForbidden(wrt, req)
+									return //nolint:wsl_v5
+								}
+							} else {
+								umaToken, err = encryption.EncodeText(umaToken, encryptionKey)
+								if err != nil {
+									scope.Logger.Error(err.Error())
+									accessForbidden(wrt, req)
+									return //nolint:wsl_v5
+								}
+							}
+						} else {
+							if compressedToken {
+								umaToken, err = session.CompressToken(umaToken, compressTokenPool)
+								if err != nil {
+									scope.Logger.Error(err.Error())
+									accessForbidden(wrt, req)
+									return //nolint:wsl_v5
+								}
 							}
 						}
 

@@ -8,6 +8,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
+	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -54,6 +56,61 @@ func EncryptToken(
 	}
 
 	return encrypted, nil
+}
+
+func EncryptAndCompressToken(
+	scope *models.RequestScope,
+	rawToken string,
+	encKey string,
+	tokenType string,
+	compressTokenPool *utils.LimitedBufferPool,
+	writer http.ResponseWriter,
+) (string, error) {
+	var (
+		err       error
+		encrypted string
+	)
+
+	encrypted, err = session.EncryptAndCompressToken(rawToken, encKey, compressTokenPool)
+	if err != nil {
+		scope.Logger.Error(
+			"failed to compress and encrypt token",
+			zap.Error(err),
+			zap.String("type", tokenType),
+		)
+		writer.WriteHeader(http.StatusInternalServerError)
+
+		return "", err
+	}
+
+	return encrypted, nil
+}
+
+func CompressToken(
+	scope *models.RequestScope,
+	rawToken string,
+	tokenType string,
+	compressTokenPool *utils.LimitedBufferPool,
+	writer http.ResponseWriter,
+) (string, error) {
+	var (
+		err        error
+		compressed string
+	)
+
+	compressed, err = session.CompressToken(rawToken, compressTokenPool)
+	if err != nil {
+		scope.Logger.Error(
+			"failed to compress token",
+			zap.Error(err),
+			zap.String("type", tokenType),
+		)
+		writer.WriteHeader(http.StatusInternalServerError)
+
+		return "", err
+	}
+
+	return compressed, nil
 }
 
 // RevokeProxy is responsible for stopping middleware from proxying the request.
