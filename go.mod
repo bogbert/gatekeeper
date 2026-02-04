@@ -16,6 +16,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/grokify/go-pkce v0.2.4
 	github.com/jochasinga/relay v0.0.0-20161125200856-6a088273228f
+	github.com/klauspost/compress v1.18.3
 	github.com/oleiade/reflections v1.1.0
 	github.com/onsi/ginkgo/v2 v2.27.1
 	github.com/onsi/gomega v1.38.2
@@ -28,7 +29,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/unrolled/secure v1.17.0
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/klauspost/compress v1.18.3
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.46.0
