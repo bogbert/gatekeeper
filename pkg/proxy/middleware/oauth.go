@@ -48,6 +48,8 @@ func AuthenticationMiddleware(
 	store storage.Storage,
 	accessTokenDuration time.Duration,
 	enableOptionalEncryption bool,
+	enableCompressToken bool,
+	compressTokenPool *utils.LimitedBufferPool,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
@@ -163,6 +165,7 @@ func AuthenticationMiddleware(
 					req.WithContext(ctx),
 					user,
 					enableOptionalEncryption,
+					enableCompressToken,
 				)
 				if err != nil {
 					scope.Logger.Error(
@@ -280,15 +283,28 @@ func AuthenticationMiddleware(
 				}
 
 				if enableEncryptedToken || forceEncryptedCookie {
-					accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
-					if err != nil {
-						lLog.Error(
-							apperrors.ErrEncryptAccToken.Error(),
-							zap.Error(err),
-						)
-						accessForbidden(wrt, req)
+					if enableCompressToken {
+						accessToken, err = session.EncryptAndCompressToken(accessToken, encryptionKey, compressTokenPool)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrEncryptAndCompressAccToken.Error(),
+								zap.Error(err),
+							)
+							accessForbidden(wrt, req)
 
-						return
+							return
+						}
+					} else {
+						accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrEncryptAccToken.Error(),
+								zap.Error(err),
+							)
+							accessForbidden(wrt, req)
+
+							return
+						}
 					}
 				}
 
@@ -304,23 +320,36 @@ func AuthenticationMiddleware(
 
 					var encryptedRefreshToken string
 
-					encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
-					if err != nil {
-						lLog.Error(
-							apperrors.ErrEncryptRefreshToken.Error(),
-							zap.Error(err),
-						)
-						wrt.WriteHeader(http.StatusInternalServerError)
+					if enableCompressToken {
+						encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrEncryptRefreshToken.Error(),
+								zap.Error(err),
+							)
+							wrt.WriteHeader(http.StatusInternalServerError)
 
-						return
+							return
+						}
+					} else {
+						encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrEncryptRefreshToken.Error(),
+								zap.Error(err),
+							)
+							wrt.WriteHeader(http.StatusInternalServerError)
+
+							return
+						}
 					}
 
 					if store != nil {
-						go func(ctx context.Context, old string, newToken string, encrypted string) {
+						go func(ctx context.Context, id string, newID string, encrypted string) {
 							ctxx, cancel := context.WithCancel(ctx)
 							defer cancel()
 
-							err = store.Delete(ctxx, utils.GetHashKey(old))
+							err = store.Delete(ctxx, id)
 							if err != nil {
 								lLog.Error(
 									apperrors.ErrDelTokFromStore.Error(),
@@ -328,7 +357,7 @@ func AuthenticationMiddleware(
 								)
 							}
 
-							err = store.Set(ctxx, utils.GetHashKey(newToken), encrypted, refreshExpiresIn)
+							err = store.Set(ctxx, newID, encrypted, refreshExpiresIn)
 							if err != nil {
 								lLog.Error(
 									apperrors.ErrSaveTokToStore.Error(),
@@ -337,7 +366,7 @@ func AuthenticationMiddleware(
 
 								return
 							}
-						}(ctx, user.RawToken, newRawAccToken, encryptedRefreshToken)
+						}(ctx, user.ID, newUser.ID, encryptedRefreshToken)
 					} else {
 						cookMgr.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
 					}

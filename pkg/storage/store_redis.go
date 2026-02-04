@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
-	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -48,9 +47,10 @@ type RedisStore[T BasicRedis] struct {
 type RedisStoreBuilder struct {
 	opts          *redis.Options
 	clusteredOpts *redis.ClusterOptions
+	failoverOpts  *redis.FailoverOptions
 }
 
-func newRedisStoreBuilder(url string, clustered bool) (*RedisStoreBuilder, error) {
+func newRedisStoreBuilder(url string, clustered bool, failover bool) (*RedisStoreBuilder, error) {
 	if clustered {
 		opts, err := redis.ParseClusterURL(url)
 		if err != nil {
@@ -58,6 +58,15 @@ func newRedisStoreBuilder(url string, clustered bool) (*RedisStoreBuilder, error
 		}
 
 		return &RedisStoreBuilder{clusteredOpts: opts}, nil
+	}
+
+	if failover {
+		opts, err := redis.ParseFailoverURL(url)
+		if err != nil {
+			return nil, err
+		}
+
+		return &RedisStoreBuilder{failoverOpts: opts}, nil
 	}
 
 	opts, err := redis.ParseURL(url)
@@ -75,6 +84,16 @@ func (b *RedisStoreBuilder) WithCACert(caPool *x509.CertPool) *RedisStoreBuilder
 		}
 
 		b.clusteredOpts.TLSConfig.RootCAs = caPool
+
+		return b
+	}
+
+	if b.failoverOpts != nil {
+		if b.failoverOpts.TLSConfig == nil {
+			b.failoverOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+
+		b.failoverOpts.TLSConfig.RootCAs = caPool
 
 		return b
 	}
@@ -99,6 +118,16 @@ func (b *RedisStoreBuilder) WithClientCert(tlsCert *tls.Certificate) *RedisStore
 		return b
 	}
 
+	if b.failoverOpts != nil {
+		if b.failoverOpts.TLSConfig == nil {
+			b.failoverOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+
+		b.failoverOpts.TLSConfig.Certificates = []tls.Certificate{*tlsCert}
+
+		return b
+	}
+
 	if b.opts.TLSConfig == nil {
 		b.opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
@@ -111,6 +140,10 @@ func (b *RedisStoreBuilder) WithClientCert(tlsCert *tls.Certificate) *RedisStore
 func (b *RedisStoreBuilder) Build() Storage {
 	if b.clusteredOpts != nil {
 		return &RedisStore[*redis.ClusterClient]{redis.NewClusterClient(b.clusteredOpts)}
+	}
+
+	if b.failoverOpts != nil {
+		return &RedisStore[*redis.Client]{redis.NewFailoverClient(b.failoverOpts)}
 	}
 
 	return &RedisStore[*redis.Client]{redis.NewClient(b.opts)}
@@ -174,13 +207,14 @@ func (r *RedisStore[T]) Test(ctx context.Context) error {
 	return nil
 }
 
-// GetRefreshTokenFromStore retrieves a token from the store, the key we are using here is the access token.
+// GetRefreshTokenFromStore retrieves a token from the store, the key we are using here is the use subject=ID
+// keycloak uses uuids for subject.
 func (r *RedisStore[T]) GetRefreshTokenFromStore(
 	ctx context.Context,
-	token string,
+	subject string,
 ) (string, error) {
 	// step: the key is the access token
-	val, err := r.Get(ctx, utils.GetHashKey(token))
+	val, err := r.Get(ctx, subject)
 	if err != nil {
 		return val, err
 	}
