@@ -369,9 +369,9 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	}
 
 	var compressTokenPool *utils.LimitedBufferPool
-	if r.Config.EnableCompressToken {
-		compressTokenPool = utils.NewLimitedBufferPool(constant.CompressTokenPoolSize)
-	}
+
+	// Always create pool since refresh tokens are always compressed
+	compressTokenPool = utils.NewLimitedBufferPool(constant.CompressTokenPoolSize)
 
 	// step: load the templates if any
 	tmpl := createTemplates(
