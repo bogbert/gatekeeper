@@ -619,7 +619,7 @@ func DecryptAndDecompressToken(token string, encryptionKey string) (string, erro
 	}
 	defer decoder.Close()
 
-	result, err := decoder.DecodeAll(info, nil)
+	result, err := decoder.DecodeAll(compInfo, nil)
 	if err != nil {
 		return "", err
 	}
