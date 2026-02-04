@@ -320,28 +320,16 @@ func AuthenticationMiddleware(
 
 					var encryptedRefreshToken string
 
-					if enableCompressToken {
-						encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
-						if err != nil {
-							lLog.Error(
-								apperrors.ErrEncryptRefreshToken.Error(),
-								zap.Error(err),
-							)
-							wrt.WriteHeader(http.StatusInternalServerError)
-
-							return
-						}
-					} else {
-						encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
-						if err != nil {
-							lLog.Error(
-								apperrors.ErrEncryptRefreshToken.Error(),
-								zap.Error(err),
-							)
-							wrt.WriteHeader(http.StatusInternalServerError)
-
-							return
-						}
+					// Refresh token is always encrypted, so we always compress it
+					// regardless of enable-compress-token setting
+					encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
+					if err != nil {
+						lLog.Error(
+							apperrors.ErrEncryptAndCompressRefreshToken.Error(),
+							zap.Error(err),
+						)
+						wrt.WriteHeader(http.StatusInternalServerError)
+						return
 					}
 
 					if store != nil {

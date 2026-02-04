@@ -284,18 +284,13 @@ func oauthCallbackHandler(
 
 			oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
 
-			if compressedToken {
-				encrypted, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
-				if err != nil {
-					scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
-					accessForbidden(writer, req)
-					return //nolint:wsl_v5
-				}
-			} else {
-				encrypted, err = core.EncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
-				if err != nil {
-					return
-				}
+			// Refresh token is always encrypted, so we always compress it
+			// regardless of enable-compress-token setting
+			encrypted, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
+			if err != nil {
+				scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
+				accessForbidden(writer, req)
+				return
 			}
 
 			switch {
@@ -619,20 +614,13 @@ func loginHandler(
 			if enableRefreshTokens && token.RefreshToken != "" {
 				refreshToken = token.RefreshToken
 
-				if enableCompressToken {
-					refreshToken, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
-					if err != nil {
-						scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
-						return http.StatusInternalServerError, //nolint:wsl_v5
-							errors.Join(apperrors.ErrEncryptAndCompressRefreshToken, err)
-					}
-				} else {
-					refreshToken, err = encryption.EncodeText(refreshToken, encryptionKey)
-					if err != nil {
-						scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
-						return http.StatusInternalServerError, //nolint:wsl_v5
-							errors.Join(apperrors.ErrEncryptRefreshToken, err)
-					}
+				// Refresh token is always encrypted, so we always compress it
+				// regardless of enable-compress-token setting
+				refreshToken, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
+				if err != nil {
+					scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
+					return http.StatusInternalServerError,
+						errors.Join(apperrors.ErrEncryptAndCompressRefreshToken, err)
 				}
 
 				refreshExpiry := session.GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken)
