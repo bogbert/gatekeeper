@@ -2,7 +2,6 @@ package session
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -21,6 +20,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/klauspost/compress/zstd"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/grokify/go-pkce"
@@ -483,14 +483,25 @@ func CompressToken(token string, pool *utils.LimitedBufferPool) (string, error) 
 	}
 	defer pool.Put(compBuffer)
 
-	gzWr := gzip.NewWriter(compBuffer)
-
-	_, err = gzWr.Write(info)
+	// Create zstd encoder with SpeedBetterCompression level
+	encoder, err := zstd.NewWriter(
+		compBuffer,
+		zstd.WithEncoderLevel(zstd.SpeedBetterCompression),
+	)
 	if err != nil {
 		return "", err
 	}
 
-	gzWr.Close()
+	_, err = encoder.Write(info)
+	if err != nil {
+		encoder.Close()
+		return "", err
+	}
+
+	err = encoder.Close()
+	if err != nil {
+		return "", err
+	}
 
 	compInfo := base64.RawURLEncoding.EncodeToString(compBuffer.Bytes())
 
@@ -508,21 +519,17 @@ func DecompressToken(compressedToken string) (string, error) {
 		return "", err
 	}
 
-	gzR, err := gzip.NewReader(bytes.NewReader(info))
+	// Create zstd decoder
+	decoder, err := zstd.NewReader(nil)
 	if err != nil {
 		return "", err
 	}
+	defer decoder.Close()
 
-	// Empty byte slice.
-	var result []byte
-
-	// Read in data.
-	result, err = io.ReadAll(gzR)
+	result, err := decoder.DecodeAll(info, nil)
 	if err != nil {
 		return "", err
 	}
-
-	gzR.Close()
 
 	compInfo := base64.RawURLEncoding.EncodeToString(result)
 
@@ -546,14 +553,25 @@ func EncryptAndCompressToken(token string, encryptionKey string, pool *utils.Lim
 	}
 	defer pool.Put(compBuffer)
 
-	gzWr := gzip.NewWriter(compBuffer)
-
-	_, err = gzWr.Write(info)
+	// Create zstd encoder with SpeedBetterCompression level
+	encoder, err := zstd.NewWriter(
+		compBuffer,
+		zstd.WithEncoderLevel(zstd.SpeedBetterCompression),
+	)
 	if err != nil {
 		return "", err
 	}
 
-	gzWr.Close()
+	_, err = encoder.Write(info)
+	if err != nil {
+		encoder.Close()
+		return "", err
+	}
+
+	err = encoder.Close()
+	if err != nil {
+		return "", err
+	}
 
 	compHeader, err := encryption.EncodeText(parts[0], encryptionKey)
 	if err != nil {
@@ -594,21 +612,17 @@ func DecryptAndDecompressToken(token string, encryptionKey string) (string, erro
 		return "", errors.Join(apperrors.ErrDecryptTokenSignature, err)
 	}
 
-	gzR, err := gzip.NewReader(bytes.NewReader(compInfo))
+	// Create zstd decoder
+	decoder, err := zstd.NewReader(nil)
 	if err != nil {
 		return "", err
 	}
+	defer decoder.Close()
 
-	// Empty byte slice.
-	var result []byte
-
-	// Read in data.
-	result, err = io.ReadAll(gzR)
+	result, err := decoder.DecodeAll(info, nil)
 	if err != nil {
 		return "", err
 	}
-
-	gzR.Close()
 
 	info := base64.RawURLEncoding.EncodeToString(result)
 
