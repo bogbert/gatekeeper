@@ -20,7 +20,6 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
-	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/grokify/go-pkce"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -140,7 +139,6 @@ func GetIdentity(
 	forceEncryptedCookie bool,
 	enableOptionalEncryption bool,
 	encKey string,
-	compressEncryptedTokens bool,
 ) func(req *http.Request, tokenCookie string, tokenHeader string) (string, error) {
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (string, error) {
 		var isBearer bool
@@ -155,34 +153,16 @@ func GetIdentity(
 			return "", err
 		}
 
-		// Only decrypt/decompress if it is NOT a Bearer token (i.e. it is a cookie)
-		if (enableEncryptedToken || forceEncryptedCookie) && !isBearer {
+		if enableEncryptedToken || forceEncryptedCookie && !isBearer {
 			origToken := token
 
-			if compressEncryptedTokens {
-				// 1. 1. Decrypt + Decompress
-				compressedData, err := encryption.DecodeCompressedData(token, encKey)
-				if err != nil {
-					if enableOptionalEncryption {
-						return origToken, nil
-					}
-					return "", apperrors.ErrDecryption
+			token, err = encryption.DecodeText(token, encKey)
+			if err != nil {
+				if enableOptionalEncryption {
+					return origToken, nil
 				}
 
-				// 2. Reconstruct JWT
-				token, err = core.DecompressJWTToken(compressedData)
-				if err != nil {
-					return "", fmt.Errorf("failed to decompress access token: %w", err)
-				}
-			} else {
-				// Legacy behavior (Decryption only)
-				token, err = encryption.DecodeText(token, encKey)
-				if err != nil {
-					if enableOptionalEncryption {
-						return origToken, nil
-					}
-					return "", apperrors.ErrDecryption
-				}
+				return "", apperrors.ErrDecryption
 			}
 		}
 
@@ -271,7 +251,7 @@ func ExtractIdentity(rawToken string) (*models.UserContext, error) {
 	}, nil
 }
 
-// RetrieveRefreshToken retrieves the refresh token from store or cookie and decompresses it.
+// RetrieveRefreshToken retrieves the refresh token from store or cookie.
 func RetrieveRefreshToken(
 	store storage.Storage,
 	cookieRefreshName string,
@@ -279,7 +259,6 @@ func RetrieveRefreshToken(
 	req *http.Request,
 	user *models.UserContext,
 	enableOptionalEncryption bool,
-	compressEncryptedTokens bool,
 ) (string, string, error) {
 	var (
 		token string
@@ -297,34 +276,14 @@ func RetrieveRefreshToken(
 		return token, "", err
 	}
 
-	encrypted := token
+	encrypted := token // returns encrypted, avoids encoding twice
 
-	if compressEncryptedTokens {
-		// decrypt and decompress
-		compressedData, err := encryption.DecodeCompressedData(token, encryptionKey)
-		if err != nil && enableOptionalEncryption {
-			return encrypted, encrypted, nil
-		}
-
-		if err != nil {
-			return "", encrypted, err
-		}
-
-		decompressed, err := core.DecompressJWTToken(compressedData)
-		if err != nil {
-			return "", encrypted, fmt.Errorf("failed to decompress token: %w", err)
-		}
-
-		return decompressed, encrypted, nil
-	} else {
-		// legacy: decrypt only (no compression)
-		token, err = encryption.DecodeText(token, encryptionKey)
-		if err != nil && enableOptionalEncryption {
-			return encrypted, encrypted, nil
-		}
-
-		return token, encrypted, err
+	token, err = encryption.DecodeText(token, encryptionKey)
+	if err != nil && enableOptionalEncryption {
+		return encrypted, encrypted, nil
 	}
+
+	return token, encrypted, err
 }
 
 // GetAccessCookieExpiration calculates the expiration of the access token cookie.

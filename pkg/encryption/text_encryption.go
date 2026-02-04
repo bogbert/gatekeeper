@@ -80,31 +80,3 @@ func DecodeText(state, key string) (string, error) {
 
 	return string(encoded), nil
 }
-
-// EncodeCompressedData encrypts compressed binary data and returns base64 encoded result.
-// This is optimized for already-compressed data to avoid double encoding.
-func EncodeCompressedData(compressedData []byte, key string) (string, error) {
-	cipherText, err := EncryptDataBlock(compressedData, []byte(key))
-	if err != nil {
-		return "", err
-	}
-
-	return base64.RawStdEncoding.EncodeToString(cipherText), nil
-}
-
-// DecodeCompressedData decrypts data and returns the compressed binary data.
-// This is optimized for compressed data to avoid unnecessary string conversion.
-func DecodeCompressedData(state, key string) ([]byte, error) {
-	cipherText, err := base64.RawStdEncoding.DecodeString(state)
-	if err != nil {
-		return nil, err
-	}
-
-	// decrypt to get back the compressed data
-	compressedData, err := DecryptDataBlock(cipherText, []byte(key))
-	if err != nil {
-		return nil, apperrors.ErrInvalidSession
-	}
-
-	return compressedData, nil
-}
