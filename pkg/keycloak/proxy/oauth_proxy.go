@@ -15,6 +15,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 )
 
 type PAT struct {
@@ -46,4 +48,8 @@ type OauthProxy struct {
 	rpt            *RPT
 	Cm             *cookie.Manager
 	ErrGroup       *errgroup.Group
+
+	// External IDP enrichment fields
+	ExternalIDPEnricher *externalidp.Enricher
+	ExternalIDPStopCh   chan struct{}
 }

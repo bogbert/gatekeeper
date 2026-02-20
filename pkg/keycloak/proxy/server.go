@@ -65,6 +65,8 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 )
 
 //nolint:gochecknoinits
@@ -181,6 +183,48 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 	}
 
 	svc.Log.Info("successfully retrieved openid configuration from the discovery")
+
+	// External IDP initialization (begin)
+	var externalIDPEnricher *externalidp.Enricher
+	var externalIDPCache *externalidp.UserCache
+	var externalIDPStopCh chan struct{}
+
+	if config.EnableExternalIDPEnrichment {
+		log.Info("initializing external IDP enrichment",
+			zap.String("users_file", config.ExternalIDPUsersFile),
+			zap.String("match_claim", config.ExternalIDPMatchClaim),
+			zap.String("match_field", config.ExtIDPUsersFileMatchField),
+		)
+
+		enricherConfig := externalidp.NewConfig(
+			config.EnableExternalIDPEnrichment,
+			config.ExternalIDPUsersFile,
+			config.ExternalIDPMatchClaim,
+			config.ExtIDPUsersFileMatchField,
+			config.ExtIDPUserFilter,
+			config.ExtIDPUserFilterIsRegex,
+			config.ExternalIDPUsersFileReloadInterval,
+		)
+
+		var err error
+		externalIDPCache, err = externalidp.NewUserCache(enricherConfig, log)
+		if err != nil {
+			return nil, errors.Join(apperrors.ErrExternalIDPCacheInitFailed, err)
+		}
+
+		externalIDPEnricher = externalidp.NewEnricher(externalIDPCache, enricherConfig)
+
+		// Start auto-reload in background
+		externalIDPStopCh = make(chan struct{})
+		go externalIDPCache.StartAutoReload(log, externalIDPStopCh)
+
+		log.Info("external IDP enrichment enabled successfully")
+	}
+
+	// Store these in the OauthProxy struct
+	svc.ExternalIDPEnricher = externalIDPEnricher
+	svc.ExternalIDPStopCh = externalIDPStopCh
+	// External IDP initialization (end)
 
 	if config.ClientID == "" && config.ClientSecret == "" {
 		log.Warn(
@@ -858,11 +902,26 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			r.Config.EnableHeaderEncoding,
 		)
 
+		// External IDP injection (begin)
 		middlewares := []func(http.Handler) http.Handler{
 			authMid,
+		}
+
+		// Add external IDP enrichment middleware if enabled
+		if r.ExternalIDPEnricher != nil {
+			externalIDPEnrichMid := externalIDPEnrichmentMiddleware(
+				r.Log,
+				r.ExternalIDPEnricher,
+				accessForbidden,
+			)
+			middlewares = append(middlewares, externalIDPEnrichMid)
+		}
+
+		middlewares = append(middlewares,
 			authFailMiddleware,
 			admissionMiddleware,
-		}
+		)
+		// External IDP injection (end)
 
 		if r.Config.EnableLoA && res.NoRedirect {
 			r.Log.Warn(
@@ -954,12 +1013,27 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				accessForbidden,
 			)
 
+			// External IDP injection (begin)
 			middlewares = []func(http.Handler) http.Handler{
 				authMid,
+			}
+
+			// Add external IDP enrichment middleware if enabled
+			if r.ExternalIDPEnricher != nil {
+				externalIDPEnrichMid := externalIDPEnrichmentMiddleware(
+					r.Log,
+					r.ExternalIDPEnricher,
+					accessForbidden,
+				)
+				middlewares = append(middlewares, externalIDPEnrichMid)
+			}
+
+			middlewares = append(middlewares,
 				authFailMiddleware,
 				authzMiddleware,
 				admissionMiddleware,
-			}
+			)
+			// External IDP injection (end)
 
 			if r.Config.EnableLoA && !res.NoRedirect {
 				middlewares = append(
@@ -1342,6 +1416,13 @@ func (r *OauthProxy) Shutdown() error {
 		r.Config.ServerGraceTimeout,
 	)
 	defer cancel()
+
+	// External IDP stop (begin)
+	if r.ExternalIDPStopCh != nil {
+		r.Log.Debug("stopping external IDP cache auto-reload")
+		close(r.ExternalIDPStopCh)
+	}
+	// External IDP stop (end)
 
 	var err error
 

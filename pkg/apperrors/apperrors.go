@@ -250,4 +250,8 @@ var (
 	ErrNegativeisPatRetryCount          = errors.New("pat retry count must be greater than zero")
 	ErrEnableTokenCompression           = errors.New("cannot enable token compression " +
 		"with optional token encryption")
+
+	ErrExternalIDPEnrichmentFailed = errors.New("failed to enrich identity with external IDP data")
+	ErrExternalIDPUserNotFound     = errors.New("user not found in external IDP cache")
+	ErrExternalIDPCacheInitFailed  = errors.New("failed to initialize external IDP cache")
 )

@@ -37,6 +37,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
+
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 )
 
 /*
@@ -397,6 +399,67 @@ func SigningMiddleware(
 			if len(forwardingDomains) == 0 || utils.ContainsSubString(hostname, forwardingDomains) {
 				req.Header.Set(constant.AuthorizationHeader, "Bearer "+token)
 			}
+
+			next.ServeHTTP(wrt, req)
+		})
+	}
+}
+
+// externalIDPEnrichmentMiddleware enriches tokens from external IDP with Keycloak user data
+func externalIDPEnrichmentMiddleware(
+	logger *zap.Logger,
+	enricher *externalidp.Enricher,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			// Skip if enrichment is not enabled
+			if enricher == nil || !enricher.ShouldEnrich() {
+				next.ServeHTTP(wrt, req)
+				return
+			}
+
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
+
+			// Skip if no identity or access already denied
+			if scope.Identity == nil || scope.AccessDenied {
+				next.ServeHTTP(wrt, req)
+				return
+			}
+
+			scope.Logger.Debug("external IDP enrichment middleware")
+
+			// Attempt to enrich the identity
+			enrichedIdentity, err := enricher.EnrichIdentity(scope.Identity, scope.Logger)
+			if err != nil {
+				scope.Logger.Error("access denied: failed to enrich identity from external IDP",
+					zap.Error(err),
+					zap.String("original_subject", scope.Identity.ID),
+					zap.String("original_username", scope.Identity.Name),
+					zap.String("original_email", scope.Identity.Email),
+				)
+
+				// Mark access as denied but don't call accessForbidden yet
+				// Let the normal flow handle the response
+				scope.AccessDenied = true
+				accessForbidden(wrt, req)
+				return
+			}
+
+			// Replace the identity with enriched version
+			scope.Identity = enrichedIdentity
+
+			scope.Logger.Info("identity successfully enriched with Keycloak user data",
+				zap.String("keycloak_user_id", enrichedIdentity.ID),
+				zap.String("keycloak_username", enrichedIdentity.Name),
+				zap.String("keycloak_email", enrichedIdentity.Email),
+				zap.Strings("keycloak_roles", enrichedIdentity.Roles),
+				zap.Strings("keycloak_groups", enrichedIdentity.Groups),
+			)
 
 			next.ServeHTTP(wrt, req)
 		})
