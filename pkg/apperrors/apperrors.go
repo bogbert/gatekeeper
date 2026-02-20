@@ -61,6 +61,7 @@ var (
 	ErrDecryptTokenSignature          = errors.New("unable to decrypt token signature")
 	ErrDecompressToken                = errors.New("unable to decompress token")
 	ErrDecryptAndDecompressToken      = errors.New("unable to decrypt and decompress token")
+	ErrExtractIDTokenClaims           = errors.New("problem extracting idToken claims")
 
 	ErrDelTokFromStore = errors.New("failed to remove old token")
 	ErrSaveTokToStore  = errors.New("failed to store refresh token")
@@ -111,6 +112,8 @@ var (
 	ErrCompressAccessToken  = errors.New("problem compressing access token")
 	ErrCompressIDToken      = errors.New("problem compressing id token")
 	ErrCompressRefreshToken = errors.New("problem compressing refresh token")
+
+	ErrConnectionUpgrade = errors.New("connection upgrade failed")
 
 	// config errors.
 
@@ -250,6 +253,7 @@ var (
 	ErrNegativeisPatRetryCount          = errors.New("pat retry count must be greater than zero")
 	ErrEnableTokenCompression           = errors.New("cannot enable token compression " +
 		"with optional token encryption")
+	ErrEnableIDTokenClaims = errors.New("enable id token claims requires also enable-id-token-cookie option")
 
 	ErrExternalIDPEnrichmentFailed = errors.New("failed to enrich identity with external IDP data")
 	ErrExternalIDPUserNotFound     = errors.New("user not found in external IDP cache")

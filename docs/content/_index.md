@@ -532,7 +532,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.5.0
+  image: quay.io/gogatekeeper/gatekeeper:4.6.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -559,7 +559,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.5.0
+  image: quay.io/gogatekeeper/gatekeeper:4.6.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -751,7 +751,7 @@ option is set to `true`.
 
 ## Custom claim headers
 
-You can inject additional claims from the access token into the
+You can inject additional claims from the access token and from version 4.6.0 also from ID token and userinfo into the
 upstream headers with the `--add-claims` option. For example, a
 token from a Keycloak provider might include the following
 claims:

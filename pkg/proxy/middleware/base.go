@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -225,6 +226,8 @@ func IdentityHeadersMiddleware(
 	enableAuthzHeader bool,
 	enableAuthzCookies bool,
 	enableHeaderEncoding bool,
+	enableIDTokenClaims bool,
+	enableUserInfoClaims bool,
 ) func(http.Handler) http.Handler {
 	customClaims := make(map[string]string)
 
@@ -305,6 +308,28 @@ func IdentityHeadersMiddleware(
 						headers.Set(header, val)
 					} else {
 						headers.Set(header, "")
+					}
+
+					if enableIDTokenClaims {
+						if claim, found := user.IDTokenClaims[claim]; found {
+							val := fmt.Sprintf("%v", claim)
+							if enableHeaderEncoding {
+								val = mime.BEncoding.Encode(encoding, val)
+							}
+
+							headers.Set(header, val)
+						}
+					}
+
+					if enableUserInfoClaims {
+						if claim, found := user.UserInfoClaims[claim]; found {
+							val := fmt.Sprintf("%v", claim)
+							if enableHeaderEncoding {
+								val = mime.BEncoding.Encode(encoding, val)
+							}
+
+							headers.Set(header, val)
+						}
 					}
 				}
 			}
@@ -399,7 +424,10 @@ func ProxyMiddleware(
 				err := utils.TryUpdateConnection(req, wrt, endpoint)
 				if err != nil {
 					logger.Error("failed to upgrade connection", zap.Error(err))
-					wrt.WriteHeader(http.StatusInternalServerError)
+
+					if !errors.Is(err, apperrors.ErrConnectionUpgrade) {
+						wrt.WriteHeader(http.StatusInternalServerError)
+					}
 
 					return
 				}

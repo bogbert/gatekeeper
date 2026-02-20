@@ -200,6 +200,8 @@ type Config struct {
 	EnableLogoutAuth                   bool `env:"ENABLE_LOGOUT_AUTH" json:"enable-logout-auth" usage:"enable authentication on logout handler" yaml:"enable-logout-auth"`
 	EnableRequestUpstreamCompression   bool `env:"ENABLE_REQUEST_UPSTREAM_COMPRESSION" json:"enable-request-upstream-compression" usage:"enables asking upstream for compression, by adding Accept-Encoding: gzip header and decompressing response from upstream" yaml:"enable-request-upstream-compression"`
 	EnableAcceptEncodingHeader         bool `env:"ENABLE_ACCEPT_ENCODING_HEADER" json:"enable-accept-encoding-header" usage:"pass Accept-Encoding header from client to upstream" yaml:"enable-accept-encoding-header"`
+	EnableIDTokenClaims                bool `env:"ENABLE_ID_TOKEN_CLAIMS" json:"enable-id-token-claims" usage:"extract claims also from id token, you can then use --add-claims option to specify claims from id token" yaml:"enable-id-token-claims"`
+	EnableUserInfoClaims               bool `env:"ENABLE_USER_INFO_CLAIMS" json:"enable-user-info-claims" usage:"extract information from userinfo endpoint, you can then use --add-claims to specify claims" yaml:"enable-user-info-claims"`
 	IsDiscoverURILegacy                bool
 
 	// External IDP enrichment configuration
@@ -702,6 +704,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isEnableXForwardedHeadersValid,
 			r.isEnableOptionalEncryptionValid,
 			r.isEnableLogoutAuthValid,
+			r.isEnableIDTokenClaimsValid,
 
 			r.isExternalIDPEnrichmentValid,
 		}
@@ -1221,6 +1224,14 @@ func (r *Config) isPatRetryCountValid() error {
 func (r *Config) isEnableCompressTokenValid() error {
 	if r.EnableOptionalEncryption && r.EnableCompressToken {
 		return apperrors.ErrEnableRequestUpstreamCompression
+	}
+
+	return nil
+}
+
+func (r *Config) isEnableIDTokenClaimsValid() error {
+	if r.EnableIDTokenClaims && !r.EnableIDTokenCookie {
+		return apperrors.ErrEnableIDTokenClaims
 	}
 
 	return nil
