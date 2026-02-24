@@ -312,6 +312,10 @@ func RetrieveRefreshToken(
 
 	encrypted := token // returns encrypted, avoids encoding twice
 
+        // In this fork of gatekeeper, we always force the compression of the refresh token
+        // regardless of the enableCompressToken setting
+        enableCompressToken = true
+
 	if enableCompressToken {
 		token, err = DecryptAndDecompressToken(token, encryptionKey)
 		if err != nil {
