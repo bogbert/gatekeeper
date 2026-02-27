@@ -120,15 +120,21 @@ func RetrieveIDToken(
 	if enableEncryptedToken || forceEncryptedCookie {
 		encrypted = token
 
-		token, err = encryption.DecodeText(token, encryptionKey)
-		if err != nil && enableOptionalEncryption {
-			return encrypted, encrypted, nil
-		}
-
 		if enableCompressToken {
 			token, err = session.DecryptAndDecompressToken(token, encryptionKey)
 			if err != nil {
+				if enableOptionalEncryption {
+					return encrypted, encrypted, nil
+				}
 				return "", "", errors.Join(apperrors.ErrDecryptAndDecompressToken, err)
+			}
+		} else {
+			token, err = encryption.DecodeText(token, encryptionKey)
+			if err != nil && enableOptionalEncryption {
+				return encrypted, encrypted, nil
+			}
+			if err != nil {
+				return "", "", apperrors.ErrDecryption
 			}
 		}
 	} else if enableCompressToken {
