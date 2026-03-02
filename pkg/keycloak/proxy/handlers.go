@@ -793,12 +793,16 @@ func logoutHandler(
 			return //nolint:wsl_v5
 		}
 
-		if postLogoutRedirectURI != "" {
-			redirectURL = postLogoutRedirectURI
+		// Resolve hostname placeholders for this specific request
+		effectivePostLogoutRedirectURI := utils.ReplaceHostnamePlaceholder(postLogoutRedirectURI, req)
+		effectiveRedirectionURL := utils.ReplaceHostnamePlaceholder(redirectionURL, req)
+
+		if effectivePostLogoutRedirectURI != "" {
+			redirectURL = effectivePostLogoutRedirectURI
 		} else {
 			// then we can default to redirection url
 			redirectURL = strings.TrimSuffix(
-				redirectionURL,
+				effectiveRedirectionURL,
 				"/oauth/callback",
 			)
 		}
@@ -808,7 +812,7 @@ func logoutHandler(
 			identityToken = user.RawToken
 		}
 
-		if enableLogoutRedirect && postLogoutRedirectURI != "" {
+		if enableLogoutRedirect && effectivePostLogoutRedirectURI != "" {
 			idToken, _, err = handlers.RetrieveIDToken(
 				cookieIDTokenName,
 				enableEncryptedToken,

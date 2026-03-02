@@ -194,9 +194,13 @@ func GetRedirectionURL(
 	enableXForwardedHeaders bool,
 ) func(wrt http.ResponseWriter, req *http.Request) string {
 	return func(wrt http.ResponseWriter, req *http.Request) string {
+		// Resolve the effective redirection URL for this request,
+		// substituting {hostname} with the actual request hostname if needed.
+		effectiveRedirectionURL := utils.ReplaceHostnamePlaceholder(redirectionURL, req)
+
 		var redirect string
 
-		switch redirectionURL {
+		switch effectiveRedirectionURL {
 		case "":
 			var (
 				scheme string
@@ -225,7 +229,7 @@ func GetRedirectionURL(
 
 			redirect = fmt.Sprintf("%s://%s", scheme, host)
 		default:
-			redirect = redirectionURL
+			redirect = effectiveRedirectionURL
 		}
 
 		if !noState {

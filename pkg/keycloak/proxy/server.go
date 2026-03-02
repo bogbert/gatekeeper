@@ -191,19 +191,19 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 
 	if config.EnableExternalIDPEnrichment {
 		log.Info("initializing external IDP enrichment",
-			zap.String("users_file", config.ExternalIDPUsersFile),
-			zap.String("match_claim", config.ExternalIDPMatchClaim),
+			zap.String("users_file", config.ExtIDPUsersFile),
+			zap.String("match_claim", config.ExtIDPMatchClaim),
 			zap.String("match_field", config.ExtIDPUsersFileMatchField),
 		)
 
 		enricherConfig := externalidp.NewConfig(
 			config.EnableExternalIDPEnrichment,
-			config.ExternalIDPUsersFile,
-			config.ExternalIDPMatchClaim,
+			config.ExtIDPUsersFile,
+			config.ExtIDPMatchClaim,
 			config.ExtIDPUsersFileMatchField,
 			config.ExtIDPUserFilter,
 			config.ExtIDPUserFilterIsRegex,
-			config.ExternalIDPUsersFileReloadInterval,
+			config.ExtIDPUsersFileReloadInterval,
 		)
 
 		var err error

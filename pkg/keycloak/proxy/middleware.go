@@ -453,7 +453,7 @@ func externalIDPEnrichmentMiddleware(
 			// Replace the identity with enriched version
 			scope.Identity = enrichedIdentity
 
-			scope.Logger.Info("identity successfully enriched with Keycloak user data",
+			scope.Logger.Debug("identity successfully enriched with Keycloak user data",
 				zap.String("keycloak_user_id", enrichedIdentity.ID),
 				zap.String("keycloak_username", enrichedIdentity.Name),
 				zap.String("keycloak_email", enrichedIdentity.Email),

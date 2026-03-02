@@ -54,25 +54,25 @@ Add to your Gatekeeper configuration:
 
 ```yaml
 enable-external-idp-enrichment: true
-external-idp-users-file: /etc/gatekeeper/users.json
-external-idp-match-claim: preferred_username
+extidp-users-file: /etc/gatekeeper/users.json
+extidp-match-claim: preferred_username
 extidp-users-file-match-field: username
 extidp-user-filter: client-ABC
 extidp-user-filter-is-regex: false
-external-idp-users-file-reload-interval: 30s
+extidp-users-file-reload-interval: 30s
 ```
 
 ### Configuration Parameters
 
-| Parameter                                 | Required | Default              | Description                                            |
-|-------------------------------------------|----------|----------------------|--------------------------------------------------------|
-| `enable-external-idp-enrichment`          | No       | `false`              | Enable/disable enrichment                              |
-| `external-idp-users-file`                 | Yes*     | -                    | Path to JSON file with Keycloak users                  |
-| `external-idp-match-claim`                | Yes*     | `preferred_username` | Claim in external token to match users                 |
-| `extidp-users-file-match-field`           | Yes*     | `username`           | Field in JSON to match against (`username` or `email`) |
-| `extidp-user-filter`                      | No       | `""`                 | Filter users by tag (empty = accept all)               |
-| `extidp-user-filter-is-regex`             | No       | `false`              | Treat filter as regex pattern                          |
-| `external-idp-users-file-reload-interval` | Yes*     | `30s`                | How often to check for file updates                    |
+| Parameter                           | Required | Default              | Description                                            |
+|-------------------------------------|----------|----------------------|--------------------------------------------------------|
+| `enable-external-idp-enrichment`    | No       | `false`              | Enable/disable enrichment                              |
+| `extidp-users-file`                 | Yes*     | -                    | Path to JSON file with Keycloak users                  |
+| `extidp-match-claim`                | Yes*     | `preferred_username` | Claim in external token to match users                 |
+| `extidp-users-file-match-field`     | Yes*     | `username`           | Field in JSON to match against (`username` or `email`) |
+| `extidp-user-filter`                | No       | `""`                 | Filter users by tag (empty = accept all)               |
+| `extidp-user-filter-is-regex`       | No       | `false`              | Treat filter as regex pattern                          |
+| `extidp-users-file-reload-interval` | Yes*     | `30s`                | How often to check for file updates                    |
 
 \* Required when `enable-external-idp-enrichment` is `true`
 

@@ -704,3 +704,30 @@ func (limPool *LimitedBufferPool) Put(buf *bytes.Buffer) {
 func (limPool *LimitedBufferPool) Capacity() int32 {
 	return atomic.LoadInt32(&limPool.count)
 }
+
+const HostnamePlaceholder = "{hostname}"
+
+// ReplaceHostnamePlaceholder replaces the {hostname} placeholder in the given
+// string with the actual hostname extracted from the HTTP request.
+// It checks X-Forwarded-Host header first, then falls back to req.Host.
+func ReplaceHostnamePlaceholder(s string, req *http.Request) string {
+	if !strings.Contains(s, HostnamePlaceholder) {
+		return s
+	}
+
+	hostname := req.Host
+
+	// Use X-Forwarded-Host if present (common behind reverse proxies)
+	if fwdHost := req.Header.Get("X-Forwarded-Host"); fwdHost != "" {
+		hostname = fwdHost
+	}
+
+	// Strip port if present to keep only the hostname
+	// (optional: keep port if needed for redirection URLs)
+	// host, _, err := net.SplitHostPort(hostname)
+	// if err == nil {
+	//     hostname = host
+	// }
+
+	return strings.ReplaceAll(s, HostnamePlaceholder, hostname)
+}

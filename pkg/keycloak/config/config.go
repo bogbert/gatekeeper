@@ -206,12 +206,12 @@ type Config struct {
 
 	// External IDP enrichment configuration
 	EnableExternalIDPEnrichment        bool          `env:"ENABLE_EXTERNAL_IDP_ENRICHMENT" json:"enable-external-idp-enrichment" usage:"enable enrichment of external IDP tokens with Keycloak user data" yaml:"enable-external-idp-enrichment"`
-	ExternalIDPUsersFile               string        `env:"EXTERNAL_IDP_USERS_FILE" json:"external-idp-users-file" usage:"path to JSON file containing Keycloak users data for enrichment" yaml:"external-idp-users-file"`
-	ExternalIDPMatchClaim              string        `env:"EXTERNAL_IDP_MATCH_CLAIM" json:"external-idp-match-claim" usage:"claim name in external IDP token to match users (e.g. preferred_username, email)" yaml:"external-idp-match-claim"`
+	ExtIDPUsersFile                    string        `env:"EXTIDP_USERS_FILE" json:"extidp-users-file" usage:"path to JSON file containing Keycloak users data for enrichment" yaml:"extidp-users-file"`
+	ExtIDPMatchClaim                   string        `env:"EXTIDP_MATCH_CLAIM" json:"extidp-match-claim" usage:"claim name in external IDP token to match users (e.g. preferred_username, email)" yaml:"extidp-match-claim"`
 	ExtIDPUsersFileMatchField          string        `env:"EXTIDP_USERS_FILE_MATCH_FIELD" json:"extidp-users-file-match-field" usage:"field name in users file to match against (username or email)" yaml:"extidp-users-file-match-field"`
-	ExtIDPUserFilter                   string        `env:"EXTIDP_USER_FILTER" json:"extidp-user-filter" usage:"filter on user's tag (literal string or regex), empty means no filter (e.g. only allow users from a specific department)" yaml:"extidp-user-filter"`
+	ExtIDPUserFilter                   string        `env:"EXTIDP_USER_FILTER" json:"extidp-user-filter" usage:"filter to identify users (literal string or regex), empty means no filter" yaml:"extidp-user-filter"`
 	ExtIDPUserFilterIsRegex            bool          `env:"EXTIDP_USER_FILTER_IS_REGEX" json:"extidp-user-filter-is-regex" usage:"treat extidp-user-filter as regex pattern" yaml:"extidp-user-filter-is-regex"`
-	ExternalIDPUsersFileReloadInterval time.Duration `env:"EXTERNAL_IDP_USERS_FILE_RELOAD_INTERVAL" json:"external-idp-users-file-reload-interval" usage:"interval to check for users file updates (in seconds)" yaml:"external-idp-users-file-reload-interval"`
+	ExtIDPUsersFileReloadInterval      time.Duration `env:"EXTIDP_USERS_FILE_RELOAD_INTERVAL" json:"extidp-users-file-reload-interval" usage:"interval to check for users file updates (in seconds)" yaml:"extidp-users-file-reload-interval"`
 }
 
 func NewDefaultConfig() *Config {
@@ -283,12 +283,12 @@ func NewDefaultConfig() *Config {
 		PatRetryInterval:                 constant.DefaultPatRetryInterval,
 		OpaTimeout:                       constant.DefaultOpaTimeout,
 
-		EnableExternalIDPEnrichment:        false,
-		ExternalIDPMatchClaim:              "preferred_username",
-		ExtIDPUsersFileMatchField:          "username",
-		ExtIDPUserFilterIsRegex:            false,
-		ExternalIDPUsersFileReloadInterval: 30 * time.Second,
-		// Note: ExtIDPUserFilter default is "" (no filter)
+		EnableExternalIDPEnrichment:   false,
+		ExtIDPMatchClaim:              "preferred_username",
+		ExtIDPUsersFileMatchField:     "username",
+		ExtIDPUserFilterIsRegex:       false,
+		ExtIDPUsersFileReloadInterval: 30 * time.Second,
+		// Note: ExtIDPUsersFile and ExtIDPUserFilter default to "" (empty)
 	}
 }
 
@@ -657,26 +657,26 @@ func (r *Config) isForwardingProxySettingsValid() error {
 
 func (r *Config) isExternalIDPEnrichmentValid() error {
 	if r.EnableExternalIDPEnrichment {
-		if r.ExternalIDPUsersFile == "" {
-			return fmt.Errorf("external-idp-users-file is required when enable-external-idp-enrichment is true")
+		if r.ExtIDPUsersFile == "" {
+			return fmt.Errorf("extidp-users-file is required when enable-external-idp-enrichment is true")
 		}
 
-		if !utils.FileExists(r.ExternalIDPUsersFile) {
-			return fmt.Errorf("external IDP users file does not exist: %s", r.ExternalIDPUsersFile)
+		if !utils.FileExists(r.ExtIDPUsersFile) {
+			return fmt.Errorf("external IDP users file does not exist: %s", r.ExtIDPUsersFile)
 		}
 
 		if r.ExtIDPUsersFileMatchField != "username" && r.ExtIDPUsersFileMatchField != "email" {
 			return fmt.Errorf("extidp-users-file-match-field must be either 'username' or 'email', got: %s", r.ExtIDPUsersFileMatchField)
 		}
 
-		if r.ExternalIDPMatchClaim == "" {
-			return fmt.Errorf("external-idp-match-claim is required when enable-external-idp-enrichment is true")
+		if r.ExtIDPMatchClaim == "" {
+			return fmt.Errorf("extidp-match-claim is required when enable-external-idp-enrichment is true")
 		}
 
 		// ExtIDPUserFilter is optional (can be empty)
 
-		if r.ExternalIDPUsersFileReloadInterval <= 0 {
-			return fmt.Errorf("external-idp-users-file-reload-interval must be positive")
+		if r.ExtIDPUsersFileReloadInterval <= 0 {
+			return fmt.Errorf("extidp-users-file-reload-interval must be positive")
 		}
 	}
 
