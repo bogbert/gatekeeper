@@ -633,9 +633,12 @@ var _ = Describe("Code Flow login/logout", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				_, err = jwt.ParseSigned(accessCookieAfterRefresh, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -743,9 +746,12 @@ var _ = Describe("Code Flow login/logout", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				_, err = jwt.ParseSigned(accessCookieAfterRefresh, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -885,9 +891,12 @@ var _ = Describe("Code Flow login/logout mTLS", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				_, err = jwt.ParseSigned(accessCookieAfterRefresh, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -1408,9 +1417,12 @@ var _ = Describe("Level Of Authentication Code Flow login/logout", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				_, err = jwt.ParseSigned(accessCookieAfterRefresh, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -1642,9 +1654,12 @@ var _ = Describe("User/password login/logout", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				_, err = jwt.ParseSigned(accessCookieAfterRefresh, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -1728,9 +1743,12 @@ var _ = Describe("User/password login/logout", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				_, err = jwt.ParseSigned(accessCookieAfterRefresh, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -2002,9 +2020,11 @@ var _ = Describe("Code Flow With signing login/logout", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
+
+				Expect(accessCookieAfterRefresh).NotTo(BeEmpty())
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
@@ -2250,13 +2270,15 @@ var _ = Describe("Code Flow login/logout EnableOptionalEncryption", func() {
 				var accessCookieAfterRefresh string
 				for _, cook := range cookiesAfterRefresh {
 					if cook.Name == constant.AccessCookie {
-						accessCookieLogin = cook.Value
+						accessCookieAfterRefresh = cook.Value
 					}
 				}
 
 				By("check if access token cookie has changed")
 				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
-				accessTokenDecr, err = encryption.DecodeText(accessCookieLogin, testKey)
+				accessTokenDecr, err = encryption.DecodeText(accessCookieAfterRefresh, testKey)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = jwt.ParseSigned(accessTokenDecr, constant.SignatureAlgs[:])
 				Expect(err).NotTo(HaveOccurred())
 
 				By("make another request with decrypted access token")
