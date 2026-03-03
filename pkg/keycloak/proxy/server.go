@@ -1988,12 +1988,51 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *keycloak_client.Clie
 
 	_, err = backoff.Retry(boCtx, operation, retryType, countOption, notifyOption)
 	if err != nil {
-		return nil,
-			nil,
-			fmt.Errorf(
+		if !r.Config.EnableIDPReconnect {
+			// Original fail-fast behavior
+			return nil, nil, fmt.Errorf(
 				"failed to retrieve the provider configuration from discovery url: %w",
 				err,
 			)
+		}
+
+		r.Log.Warn(
+			"initial IDP connection attempts exhausted, switching to slow retry loop",
+			zap.Duration("retry_interval", r.Config.IDPReconnectInterval),
+		)
+
+		const logInterval = 10 * time.Minute
+		nextLogTime := time.Now().Add(logInterval)
+		attempt := 0
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, nil, fmt.Errorf("context cancelled while waiting for IDP: %w", ctx.Err())
+			case <-time.After(r.Config.IDPReconnectInterval):
+			}
+
+			attempt++
+			provider, err = oidc3.NewProvider(ctx, r.Config.DiscoveryURL)
+			if err == nil {
+				r.Log.Info(
+					"successfully connected to IDP after slow retry",
+					zap.Int("attempts", attempt),
+				)
+				break
+			}
+
+			// Log only every logInterval to avoid log flooding
+			if time.Now().After(nextLogTime) {
+				r.Log.Warn(
+					"IDP still unreachable",
+					zap.Error(err),
+					zap.Int("attempts_since_slow_retry", attempt),
+					zap.Duration("retry_interval", r.Config.IDPReconnectInterval),
+				)
+				nextLogTime = time.Now().Add(logInterval)
+			}
+		}
 	}
 
 	return provider, idpClient, nil

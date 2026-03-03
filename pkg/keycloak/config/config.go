@@ -212,6 +212,11 @@ type Config struct {
 	ExtIDPUserFilter                   string        `env:"EXTIDP_USER_FILTER" json:"extidp-user-filter" usage:"filter to identify users (literal string or regex), empty means no filter" yaml:"extidp-user-filter"`
 	ExtIDPUserFilterIsRegex            bool          `env:"EXTIDP_USER_FILTER_IS_REGEX" json:"extidp-user-filter-is-regex" usage:"treat extidp-user-filter as regex pattern" yaml:"extidp-user-filter-is-regex"`
 	ExtIDPUsersFileReloadInterval      time.Duration `env:"EXTIDP_USERS_FILE_RELOAD_INTERVAL" json:"extidp-users-file-reload-interval" usage:"interval to check for users file updates (in seconds)" yaml:"extidp-users-file-reload-interval"`
+
+	// EnableIDPReconnect keeps retrying indefinitely instead of exiting
+	// when the IDP is unreachable at startup after initial backoff attempts.
+	EnableIDPReconnect                 bool          `env:"ENABLE_IDP_RECONNECT" json:"enable-idp-reconnect" usage:"retry connecting to IDP indefinitely at startup instead of exiting" yaml:"enable-idp-reconnect"`
+	IDPReconnectInterval               time.Duration `env:"IDP_RECONNECT_INTERVAL" json:"idp-reconnect-interval" usage:"interval between IDP reconnection attempts once initial retries are exhausted" yaml:"idp-reconnect-interval"`
 }
 
 func NewDefaultConfig() *Config {
@@ -283,12 +288,14 @@ func NewDefaultConfig() *Config {
 		PatRetryInterval:                 constant.DefaultPatRetryInterval,
 		OpaTimeout:                       constant.DefaultOpaTimeout,
 
-		EnableExternalIDPEnrichment:   false,
-		ExtIDPMatchClaim:              "preferred_username",
-		ExtIDPUsersFileMatchField:     "username",
-		ExtIDPUserFilterIsRegex:       false,
-		ExtIDPUsersFileReloadInterval: 30 * time.Second,
+		EnableExternalIDPEnrichment:      false,
+		ExtIDPMatchClaim:                 "preferred_username",
+		ExtIDPUsersFileMatchField:        "username",
+		ExtIDPUserFilterIsRegex:          false,
+		ExtIDPUsersFileReloadInterval:    30 * time.Second,
 		// Note: ExtIDPUsersFile and ExtIDPUserFilter default to "" (empty)
+
+		IDPReconnectInterval:             60 * time.Second,
 	}
 }
 
