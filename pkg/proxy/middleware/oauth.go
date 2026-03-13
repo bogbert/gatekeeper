@@ -310,31 +310,42 @@ func AuthenticationMiddleware(
 					return
 				}
 
-				encryptOnly := !enableCompressToken && (enableEncryptedToken || forceEncryptedCookie)
-				encryptedAndCompressed := enableCompressToken && (enableEncryptedToken || forceEncryptedCookie)
-				compressedOnly := enableCompressToken && !enableEncryptedToken && !forceEncryptedCookie
+				if enableEncryptedToken || forceEncryptedCookie {
+					if enableCompressToken {
+						accessToken, err = session.EncryptAndCompressToken(accessToken, encryptionKey, compressTokenPool)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrEncryptAndCompressAccToken.Error(),
+								zap.Error(err),
+							)
+							accessForbidden(wrt, req)
 
-				switch {
-				case encryptOnly:
-					accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
-					if err != nil {
-						lLog.Error(apperrors.ErrEncryptAccToken.Error(), zap.Error(err))
-						accessForbidden(wrt, req)
-						return
+							return
+						}
+					} else {
+						accessToken, err = encryption.EncodeText(accessToken, encryptionKey)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrEncryptAccToken.Error(),
+								zap.Error(err),
+							)
+							accessForbidden(wrt, req)
+
+							return
+						}
 					}
-				case encryptedAndCompressed:
-					accessToken, err = session.EncryptAndCompressToken(accessToken, encryptionKey, compressTokenPool)
-					if err != nil {
-						lLog.Error(apperrors.ErrEncryptAndCompressAccToken.Error(), zap.Error(err))
-						accessForbidden(wrt, req)
-						return
-					}
-				case compressedOnly:
-					accessToken, err = session.CompressToken(accessToken, compressTokenPool)
-					if err != nil {
-						lLog.Error(apperrors.ErrEncryptAndCompressAccToken.Error(), zap.Error(err))
-						accessForbidden(wrt, req)
-						return
+				} else {
+					if enableCompressToken {
+						accessToken, err = session.CompressToken(accessToken, compressTokenPool)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrCompressAccessToken.Error(),
+								zap.Error(err),
+							)
+							accessForbidden(wrt, req)
+
+							return
+						}
 					}
 				}
 
