@@ -177,7 +177,7 @@ func GetIdentity(
 					return "", apperrors.ErrDecryption
 				}
 			}
-		} else if enableCompressToken {
+		} else if enableCompressToken && !isBearer {
 			token, err = DecompressToken(token)
 			if err != nil {
 				return "", errors.Join(apperrors.ErrDecompressToken, err)
