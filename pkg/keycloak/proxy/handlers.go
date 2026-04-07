@@ -18,6 +18,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,6 +66,7 @@ func oauthAuthorizationHandler(
 	allowedQueryParams map[string]string,
 	defaultAllowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
+	const redirectURIParam = "redirect_uri"
 	return func(wrt http.ResponseWriter, req *http.Request) {
 		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
@@ -73,6 +75,32 @@ func oauthAuthorizationHandler(
 		}
 
 		scope.Logger.Debug("authorization handler")
+
+		// If a redirect_uri query param is provided, plant it as the request_uri
+		// cookie so that oauthCallbackHandler redirects there after a successful
+		// login, instead of defaulting to "/".
+		// Only relative paths are accepted to prevent open-redirect attacks.
+		if redirectTo := req.URL.Query().Get(redirectURIParam); redirectTo != "" {
+			parsed, err := url.ParseRequestURI(redirectTo)
+			if err != nil || parsed.Host != "" || parsed.Scheme != "" {
+				scope.Logger.Warn(
+					"ignoring invalid redirect_uri query param on /oauth/authorize",
+					zap.String("redirect_uri", redirectTo),
+				)
+			} else {
+				encoded := base64.StdEncoding.EncodeToString([]byte(redirectTo))
+				cookManager.DropCookie(
+					wrt,
+					cookManager.CookieRequestURIName,
+					encoded,
+					0, // session cookie, same as DropStateParameterCookie
+				)
+				scope.Logger.Debug(
+					"planted request_uri cookie from redirect_uri param",
+					zap.String("redirect_uri", redirectTo),
+				)
+			}
+		}
 
 		conf := newOAuth2Config(getRedirectionURL(wrt, req))
 		// step: set the access type of the session
