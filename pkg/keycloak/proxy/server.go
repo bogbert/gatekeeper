@@ -123,7 +123,7 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 		dup.EncryptionKey = ""
 		dup.ForwardingPassword = ""
 
-		out, err := json.Marshal(dup)
+		out, err := json.Marshal(dup) //nolint:gosec
 		if err != nil {
 			return nil, err
 		}
@@ -494,6 +494,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.ForceEncryptedCookie,
 		r.Config.EnableOptionalEncryption,
 		r.Config.EnableCompressToken,
+		r.Config.CompressTokenOnlyAuthScheme,
 		r.Config.EncryptionKey,
 	)
 
@@ -605,9 +606,9 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EncryptionKey,
 		newOAuth2Config,
 		r.Store,
-		r.Config.AccessTokenDuration,
 		r.Config.EnableOptionalEncryption,
 		r.Config.EnableCompressToken,
+		r.Config.CompressTokenOnlyAuthScheme,
 		r.Config.EnableIDTokenClaims,
 		r.Config.EnableUserInfoClaims,
 		compressTokenPool,
@@ -626,8 +627,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableRefreshTokens,
 		r.Config.EnableIDTokenCookie,
 		r.Config.EnableCompressToken,
+		r.Config.CompressTokenOnlyAuthScheme,
 		r.Cm,
-		r.Config.AccessTokenDuration,
 		r.Store,
 		compressTokenPool,
 	)
@@ -650,6 +651,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableOptionalEncryption,
 		r.Config.EnableLogoutAuth,
 		r.Config.EnableCompressToken,
+		r.Config.CompressTokenOnlyAuthScheme,
 		getIdentity,
 		accessForbidden,
 		r.Provider,
@@ -679,6 +681,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.ForceEncryptedCookie,
 		r.Config.EnablePKCE,
 		r.Config.EnableCompressToken,
+		r.Config.CompressTokenOnlyAuthScheme,
 		r.Provider,
 		r.Cm,
 		r.pat,
@@ -1013,6 +1016,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				r.Config.SkipAccessTokenClientIDCheck,
 				r.Config.SkipAccessTokenIssuerCheck,
 				r.Config.EnableCompressToken,
+				r.Config.CompressTokenOnlyAuthScheme,
 				compressTokenPool,
 				getIdentity,
 				accessForbidden,

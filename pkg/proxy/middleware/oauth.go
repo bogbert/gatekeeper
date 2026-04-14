@@ -30,7 +30,7 @@ func AuthenticationMiddleware(
 	logger *zap.Logger,
 	cookieAccessName string,
 	cookieRefreshName string,
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (string, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (string, bool, error),
 	httpClient *http.Client,
 	enableIDPSessionCheck bool,
 	provider *oidc3.Provider,
@@ -46,15 +46,17 @@ func AuthenticationMiddleware(
 	encryptionKey string,
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	store storage.Storage,
-	accessTokenDuration time.Duration,
 	enableOptionalEncryption bool,
 	enableCompressToken bool,
+	compressTokenOnlyAuthScheme string,
 	enableIDTokenClaims bool,
 	enableUserInfoClaims bool,
 	compressTokenPool *utils.LimitedBufferPool,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			enableCompressToken := enableCompressToken
+
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
@@ -68,7 +70,7 @@ func AuthenticationMiddleware(
 
 			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
 			// grab the user identity from the request
-			token, err := getIdentity(req, cookieAccessName, "")
+			token, isBearer, err := getIdentity(req, cookieAccessName, "")
 			if err != nil {
 				scope.Logger.Error(err.Error())
 				core.RevokeProxy(logger, req)
@@ -100,7 +102,7 @@ func AuthenticationMiddleware(
 			if enableIDTokenClaims {
 				var idErr error
 
-				idToken, idErr = getIdentity(req, cookMgr.CookieIDTokenName, "")
+				idToken, _, idErr = getIdentity(req, cookMgr.CookieIDTokenName, "")
 				if idErr != nil {
 					scope.Logger.Error(idErr.Error())
 					core.RevokeProxy(logger, req)
@@ -159,7 +161,7 @@ func AuthenticationMiddleware(
 					return
 				}
 
-				if !enableRefreshTokens {
+				if !enableRefreshTokens || isBearer {
 					lLog.Error(apperrors.ErrSessionExpiredRefreshOff.Error())
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
@@ -194,6 +196,7 @@ func AuthenticationMiddleware(
 					user,
 					enableOptionalEncryption,
 					enableCompressToken,
+					compressTokenOnlyAuthScheme,
 				)
 				if err != nil {
 					scope.Logger.Error(
@@ -285,19 +288,11 @@ func AuthenticationMiddleware(
 
 				accessExpiresIn := time.Until(accessExpiresAt)
 
-				if newRefreshToken != "" {
-					refresh = newRefreshToken
-				}
-
-				if refreshExpiresIn == 0 {
-					// refresh token expiry claims not available: try to parse refresh token
-					refreshExpiresIn = session.GetAccessCookieExpiration(lLog, accessTokenDuration, refresh)
-				}
-
 				lLog.Info(
 					"injecting the refreshed access token cookie",
-					zap.Duration("refresh_expires_in", refreshExpiresIn),
-					zap.Duration("expires_in", accessExpiresIn),
+					zap.Duration("cookie_refresh_expires_in", refreshExpiresIn),
+					zap.Duration("cookie_access_expires_in", refreshExpiresIn),
+					zap.Duration("access_expires_in", accessExpiresIn),
 				)
 
 				accessToken := newRawAccToken
@@ -308,6 +303,10 @@ func AuthenticationMiddleware(
 					accessForbidden(wrt, req)
 
 					return
+				}
+
+				if compressTokenOnlyAuthScheme != "" && compressTokenOnlyAuthScheme != string(constant.Cookie) {
+					enableCompressToken = false
 				}
 
 				if enableEncryptedToken || forceEncryptedCookie {
@@ -350,55 +349,52 @@ func AuthenticationMiddleware(
 				}
 
 				// step: inject the refreshed access token
-				cookMgr.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
+				cookMgr.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, refreshExpiresIn)
 
-				// step: inject the renewed refresh token
-				if newRefreshToken != "" {
-					lLog.Debug(
-						"renew refresh cookie with new refresh token",
-						zap.Duration("refresh_expires_in", refreshExpiresIn),
+				lLog.Debug(
+					"renew refresh cookie with new refresh token",
+					zap.Duration("refresh_expires_in", refreshExpiresIn),
+				)
+
+				var encryptedRefreshToken string
+
+				// Refresh token is always encrypted, so we always compress it
+				// regardless of enable-compress-token setting
+				encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
+				if err != nil {
+					lLog.Error(
+						apperrors.ErrEncryptAndCompressRefreshToken.Error(),
+						zap.Error(err),
 					)
+					wrt.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 
-					var encryptedRefreshToken string
+				if store != nil {
+					go func(ctx context.Context, id string, newID string, encrypted string) {
+						ctxx, cancel := context.WithCancel(ctx)
+						defer cancel()
 
-					// Refresh token is always encrypted, so we always compress it
-					// regardless of enable-compress-token setting
-					encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
-					if err != nil {
-						lLog.Error(
-							apperrors.ErrEncryptAndCompressRefreshToken.Error(),
-							zap.Error(err),
-						)
-						wrt.WriteHeader(http.StatusInternalServerError)
-						return
-					}
+						err = store.Delete(ctxx, id)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrDelTokFromStore.Error(),
+								zap.Error(err),
+							)
+						}
 
-					if store != nil {
-						go func(ctx context.Context, id string, newID string, encrypted string) {
-							ctxx, cancel := context.WithCancel(ctx)
-							defer cancel()
+						err = store.Set(ctxx, newID, encrypted, refreshExpiresIn)
+						if err != nil {
+							lLog.Error(
+								apperrors.ErrSaveTokToStore.Error(),
+								zap.Error(err),
+							)
 
-							err = store.Delete(ctxx, id)
-							if err != nil {
-								lLog.Error(
-									apperrors.ErrDelTokFromStore.Error(),
-									zap.Error(err),
-								)
-							}
-
-							err = store.Set(ctxx, newID, encrypted, refreshExpiresIn)
-							if err != nil {
-								lLog.Error(
-									apperrors.ErrSaveTokToStore.Error(),
-									zap.Error(err),
-								)
-
-								return
-							}
-						}(ctx, user.ID, newUser.ID, encryptedRefreshToken)
-					} else {
-						cookMgr.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
-					}
+							return
+						}
+					}(ctx, user.ID, newUser.ID, encryptedRefreshToken)
+				} else {
+					cookMgr.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
 				}
 
 				if enableIDTokenClaims {
@@ -527,10 +523,10 @@ func RedirectToAuthorizationMiddleware(
 								}
 							}
 
-							builder.WriteString(fmt.Sprintf("&%s=%s", key, param))
+							fmt.Fprintf(&builder, "&%s=%s", key, param)
 						} else {
 							if val, ok := defaultAllowedQueryParams[key]; ok {
-								builder.WriteString(fmt.Sprintf("&%s=%s", key, val))
+								fmt.Fprintf(&builder, "&%s=%s", key, val)
 							}
 						}
 					}

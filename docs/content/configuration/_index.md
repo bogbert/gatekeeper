@@ -14,6 +14,7 @@ weight: 2
 |    \--client-id value                       | client id used to authenticate to the oauth service | | PROXY_CLIENT_ID
 |    \--client-secret value                   | client secret used to authenticate to the oauth service | | PROXY_CLIENT_SECRET
 |    \--redirection-url value                 | redirection url for the oauth callback url, defaults to host header if absent | | PROXY_REDIRECTION_URL
+|    \--compress-token-only-auth-scheme       | compress token only for chosen auth scheme: cookie, bearer, default is empty | | PROXY_COMPRESS_TOKEN_ONLY_AUTH_SCHEME
 |    \--post-logout-redirect-uri value        | url to which client is redirected after successful logout | | PROXY_POST_LOGOUT_REDIRECT_URI
 |    \--post-login-redirect-path value        | post-login-redirect-path" usage:"path to which client is redirected after successful login, in case user access / | | PROXY_POST_LOGIN_REDIRECT_PATH
 |    \--revocation-url value                  | url for the revocation endpoint to revoke refresh token | | PROXY_REVOCATION_URL
@@ -79,7 +80,6 @@ weight: 2
 |	 \--opa-authz-uri                         | OPA endpoint address with path                        |       | PROXY_OPA_AUTHZ_URI
 |    \--pat-retry-count                       | number of retries to get PAT                          |    5  | PROXY_PAT_RETRY_COUNT
 |    \--pat-retry-interval                    | interval between retries to get PAT                   |    2s | PROXY_PAT_RETRY_INTERVAL
-|    \--access-token-duration value           | fallback cookie duration for the access token when using refresh tokens | 720h0m0s | PROXY_ACCESS_TOKEN_DURATION
 |    \--cookie-domain value                   | domain the access cookie is available to, defaults host header | | PROXY_COOKIE_DOMAIN
 |    \--cookie-path value                     | path to which cookie is available | | PROXY_COOKIE_PATH
 |    \--cookie-access-name value              | name of the cookie use to hold the access token | kc-access | PROXY_COOKIE_ACCESS_NAME

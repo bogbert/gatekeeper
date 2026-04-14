@@ -170,6 +170,7 @@ func TestGetIndentity(t *testing.T) {
 			cfg.ForceEncryptedCookie,
 			cfg.EnableOptionalEncryption,
 			cfg.EnableCompressToken,
+			cfg.CompressTokenOnlyAuthScheme,
 			cfg.EncryptionKey,
 		)
 
@@ -181,16 +182,16 @@ func TestGetIndentity(t *testing.T) {
 				compressedToken, errC := session.EncryptAndCompressToken(token, TestEncryptionKey, bufPool)
 				require.NoError(t, errC)
 
-				rawToken, err = getIdentity(testCase.Request(compressedToken), cfg.CookieAccessName, "")
+				rawToken, _, err = getIdentity(testCase.Request(compressedToken), cfg.CookieAccessName, "")
 			} else {
 				bufPool := utils.NewLimitedBufferPool(100)
 				compressedToken, errC := session.CompressToken(token, bufPool)
 				require.NoError(t, errC)
 
-				rawToken, err = getIdentity(testCase.Request(compressedToken), cfg.CookieAccessName, "")
+				rawToken, _, err = getIdentity(testCase.Request(compressedToken), cfg.CookieAccessName, "")
 			}
 		} else {
-			rawToken, err = getIdentity(testCase.Request(token), cfg.CookieAccessName, "")
+			rawToken, _, err = getIdentity(testCase.Request(token), cfg.CookieAccessName, "")
 		}
 
 		if err != nil && testCase.Ok {
@@ -260,7 +261,7 @@ func TestGetTokenInRequest(t *testing.T) {
 			Error:                           nil,
 			SkipAuthorizationHeaderIdentity: true,
 		},
-		{
+		{ //nolint:gosec
 			Token:                           "QWxhZGRpbjpPcGVuU2VzYW1l",
 			AuthScheme:                      "Basic",
 			Error:                           apperrors.ErrSessionNotFound,
@@ -314,7 +315,7 @@ func TestIsExpired(t *testing.T) {
 }
 
 func TestGetUserContext(t *testing.T) {
-	realmRoles := []string{"realm:realm"}
+	realmRoles := []string{"realm:realm"} //nolint:prealloc
 	clientRoles := []string{"client:client"}
 	token := NewTestToken("test")
 	token.addRealmRoles(realmRoles)

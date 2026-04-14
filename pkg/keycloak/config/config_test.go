@@ -1986,7 +1986,7 @@ func TestIsStoreURLValid(t *testing.T) {
 	}{
 		{
 			Name: "ValidIsStoreURL",
-			Config: &Config{
+			Config: &Config{ //nolint:gosec
 				StoreURL: "redis://user:secret@localhost:6379/4?protocol=3",
 			},
 			Valid: true,
@@ -2008,7 +2008,7 @@ func TestIsStoreURLValid(t *testing.T) {
 		},
 		{
 			Name: "ValidEnableHA",
-			Config: &Config{
+			Config: &Config{ //nolint:gosec
 				StoreURL:      "redis://user:secret@localhost:6379/4?protocol=3",
 				EnableStoreHA: true,
 			},
@@ -3359,6 +3359,30 @@ func TestIsEnableCompressTokenValid(t *testing.T) {
 			Config: &Config{
 				EnableOptionalEncryption: true,
 				EnableCompressToken:      true,
+			},
+			Valid: false,
+		},
+		{
+			Name: "ValidCompressTokenWithValidAuthScheme",
+			Config: &Config{
+				EnableCompressToken:         true,
+				CompressTokenOnlyAuthScheme: "cookie",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InValidCompressTokenWithAuthSchemeWithoutEnableCompressToken",
+			Config: &Config{
+				EnableCompressToken:         false,
+				CompressTokenOnlyAuthScheme: "cookie",
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidCompressTokenWithAuthScheme",
+			Config: &Config{
+				EnableCompressToken:         true,
+				CompressTokenOnlyAuthScheme: "invalid",
 			},
 			Valid: false,
 		},

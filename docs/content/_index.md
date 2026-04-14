@@ -532,7 +532,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.7.0
+  image: quay.io/gogatekeeper/gatekeeper:4.8.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -559,7 +559,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:4.7.0
+  image: quay.io/gogatekeeper/gatekeeper:4.8.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -751,7 +751,7 @@ option is set to `true`.
 
 ## Custom claim headers
 
-You can inject additional claims from the access token and from version 4.7.0 also from ID token and userinfo into the
+You can inject additional claims from the access token and from version 4.6.0 also from ID token and userinfo into the
 upstream headers with the `--add-claims` option. For example, a
 token from a Keycloak provider might include the following
 claims:
@@ -1492,6 +1492,10 @@ There is option for compressing tokens `--enable-compress-token`. It compresses,
 simply restore original token body by using e.g. `echo "yourtoken" | awk '{print $2}'| base64 -d | gzip -d`. In case
 token encryption is used, original token body is base64 decoded, compressed, encrypted, base64 encoded.
 
+There are some cases when you might e.g. want to have compressed token for cookie based flow and non-compressed cookie
+for api flow or vice versa. For such cases you might want to use option `--compress-token-only-auth-scheme`, which might
+have value: `cookie` or `bearer` or empty string (default).
+
 ## Request tracing
 
 Usually when there are multiple http services involved in serving user requests
@@ -1532,7 +1536,7 @@ users won’t be able to obtain an access token.
 
 ## Known Issues
 
-There WAS a known issue with the Keycloak server 4.7.0.Final in which
+There WAS a known issue with the Keycloak server 4.6.0.Final in which
 Gatekeeper Proxy is unable to find the *client\_id* in the *aud* claim. This
 is due to the fact the *client\_id* is not in the audience anymore. The
 workaround is to add the "Audience" protocol mapper to the client with

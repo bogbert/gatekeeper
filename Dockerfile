@@ -5,7 +5,7 @@ ARG HOMEDIR=/opt/gatekeeper
 # Builder
 #
 
-FROM --platform=$BUILDPLATFORM golang:1.25 AS build-env
+FROM --platform=$BUILDPLATFORM golang:1.26 AS build-env
 ARG HOMEDIR
 ARG TARGETOS TARGETARCH
 ARG FIPS
