@@ -1866,7 +1866,9 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 }
 
 func checkRefreshTokenEncryption(_ *testing.T, cfg *config.Config, value string) bool {
-	rawToken, err := encryption.DecodeText(value, cfg.EncryptionKey)
+	// Refresh tokens are always encrypted+compressed in this fork,
+	// regardless of enable-compress-token setting.
+	rawToken, err := session.DecryptAndDecompressToken(value, cfg.EncryptionKey)
 	if err != nil {
 		return false
 	}
