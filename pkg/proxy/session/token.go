@@ -263,6 +263,16 @@ func ExtractIdentity(rawToken string) (*models.UserContext, error) {
 		}
 	}
 
+	// @step: extract client roles from Cognito-style "role" claim (bracketed CSV)
+	if len(roleList) == 0 {
+		strRoles := customClaims.CognitoRoles
+		if strRoles != "" && strRoles[0] == '[' && strRoles[len(strRoles)-1] == ']' {
+			for _, role := range strings.Split(strRoles[1:len(strRoles)-1], ",") {
+				roleList = append(roleList, strings.TrimSpace(role))
+			}
+		}
+	}
+
 	return &models.UserContext{
 		Audiences:     audiences,
 		Email:         customClaims.Email,
@@ -323,6 +333,10 @@ func RetrieveRefreshToken(
 	}
 
 	encrypted := token // returns encrypted, avoids encoding twice
+
+	// Refresh tokens are always stored compressed regardless of
+	// the enable-compress-token setting (they are large and stored in cookies).
+	enableCompressToken = true
 
 	if compressTokenOnlyAuthScheme != "" && compressTokenOnlyAuthScheme != string(constant.Cookie) {
 		enableCompressToken = false

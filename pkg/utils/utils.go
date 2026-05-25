@@ -751,3 +751,22 @@ func GetRandomString(n int) (string, error) {
 
 	return string(runes), nil
 }
+
+const HostnamePlaceholder = "{hostname}"
+
+// ReplaceHostnamePlaceholder replaces the {hostname} placeholder in the given
+// string with the actual hostname extracted from the HTTP request.
+// It checks X-Forwarded-Host header first, then falls back to req.Host.
+func ReplaceHostnamePlaceholder(s string, req *http.Request) string {
+	if !strings.Contains(s, HostnamePlaceholder) {
+		return s
+	}
+
+	hostname := req.Host
+
+	if fwdHost := req.Header.Get("X-Forwarded-Host"); fwdHost != "" {
+		hostname = fwdHost
+	}
+
+	return strings.ReplaceAll(s, HostnamePlaceholder, hostname)
+}

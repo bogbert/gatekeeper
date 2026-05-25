@@ -175,6 +175,7 @@ func AdmissionMiddleware(
 			// @step: we need to check the roles
 			if !utils.HasAccess(resourceRoles, user.Roles, !resource.RequireAnyRole) {
 				lLog.Warn("access denied, invalid roles",
+					zap.String("user", user.Name),
 					zap.String("roles", resource.GetRoles()))
 				accessForbidden(wrt, req)
 
@@ -213,6 +214,7 @@ func AdmissionMiddleware(
 			// @step: check if we have any groups, the groups are there
 			if !utils.HasAccess(resourceGroups, user.Groups, false) {
 				lLog.Warn("access denied, invalid groups",
+					zap.String("user", user.Name),
 					zap.String("groups", strings.Join(resource.Groups, ",")))
 				accessForbidden(wrt, req)
 

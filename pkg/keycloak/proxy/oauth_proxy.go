@@ -9,6 +9,7 @@ import (
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	keycloak_client "github.com/gogatekeeper/gatekeeper/pkg/keycloak/client"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
@@ -46,4 +47,8 @@ type OauthProxy struct {
 	rpt            *RPT
 	Cm             *cookie.Manager
 	ErrGroup       *errgroup.Group
+
+	// External IDP enrichment fields
+	ExternalIDPEnricher *externalidp.Enricher
+	ExternalIDPStopCh   chan struct{}
 }

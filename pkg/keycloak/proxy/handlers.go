@@ -18,6 +18,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,6 +74,32 @@ func oauthAuthorizationHandler(
 		}
 
 		scope.Logger.Debug("authorization handler")
+
+		// If a redirect_uri query param is provided, plant it as the request_uri
+		// cookie so that oauthCallbackHandler redirects there after a successful
+		// login, instead of defaulting to "/".
+		// Only relative paths are accepted to prevent open-redirect attacks.
+		if redirectTo := req.URL.Query().Get("redirect_uri"); redirectTo != "" {
+			parsed, parseErr := url.ParseRequestURI(redirectTo)
+			if parseErr != nil || parsed.Host != "" || parsed.Scheme != "" {
+				scope.Logger.Warn(
+					"ignoring invalid redirect_uri query param on /oauth/authorize",
+					zap.String("redirect_uri", redirectTo),
+				)
+			} else {
+				encoded := base64.StdEncoding.EncodeToString([]byte(redirectTo))
+				cookManager.DropCookie(
+					wrt,
+					cookManager.CookieRequestURIName,
+					encoded,
+					0, // session cookie
+				)
+				scope.Logger.Debug(
+					"planted request_uri cookie from redirect_uri param",
+					zap.String("redirect_uri", redirectTo),
+				)
+			}
+		}
 
 		conf := newOAuth2Config(getRedirectionURL(wrt, req))
 		// step: set the access type of the session
@@ -291,18 +318,12 @@ func oauthCallbackHandler(
 
 			oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
 
-			if enableCompressToken {
-				encrypted, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
-				if err != nil {
-					scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
-					accessForbidden(writer, req)
-					return //nolint:wsl_v5
-				}
-			} else {
-				encrypted, err = core.EncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
-				if err != nil {
-					return
-				}
+			// Refresh tokens are always compressed regardless of enable-compress-token setting.
+			encrypted, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
+			if err != nil {
+				scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
+				accessForbidden(writer, req)
+				return //nolint:wsl_v5
 			}
 
 			switch {
@@ -632,20 +653,12 @@ func loginHandler(
 			if enableRefreshTokens && token.RefreshToken != "" {
 				refreshToken = token.RefreshToken
 
-				if enableCompressToken {
-					refreshToken, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
-					if err != nil {
-						scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
-						return http.StatusInternalServerError, //nolint:wsl_v5
-							errors.Join(apperrors.ErrEncryptAndCompressRefreshToken, err)
-					}
-				} else {
-					refreshToken, err = encryption.EncodeText(refreshToken, encryptionKey)
-					if err != nil {
-						scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
-						return http.StatusInternalServerError, //nolint:wsl_v5
-							errors.Join(apperrors.ErrEncryptRefreshToken, err)
-					}
+				// Refresh tokens are always compressed regardless of enable-compress-token setting.
+				refreshToken, err = session.EncryptAndCompressToken(refreshToken, encryptionKey, compressTokenPool)
+				if err != nil {
+					scope.Logger.Error(apperrors.ErrEncryptAndCompressRefreshToken.Error(), zap.Error(err))
+					return http.StatusInternalServerError,
+						errors.Join(apperrors.ErrEncryptAndCompressRefreshToken, err)
 				}
 
 				stdRefreshClaims, err := utils.ParseRefreshToken(token.RefreshToken)
@@ -811,11 +824,11 @@ func logoutHandler(
 		}
 
 		if postLogoutRedirectURI != "" {
-			redirectURL = postLogoutRedirectURI
+			redirectURL = utils.ReplaceHostnamePlaceholder(postLogoutRedirectURI, req)
 		} else {
 			// then we can default to redirection url
 			redirectURL = strings.TrimSuffix(
-				redirectionURL,
+				utils.ReplaceHostnamePlaceholder(redirectionURL, req),
 				"/oauth/callback",
 			)
 		}
@@ -825,7 +838,7 @@ func logoutHandler(
 			identityToken = user.RawToken
 		}
 
-		if enableLogoutRedirect && postLogoutRedirectURI != "" {
+		if enableLogoutRedirect && utils.ReplaceHostnamePlaceholder(postLogoutRedirectURI, req) != "" {
 			idToken, _, err = handlers.RetrieveIDToken(
 				cookieIDTokenName,
 				enableEncryptedToken,

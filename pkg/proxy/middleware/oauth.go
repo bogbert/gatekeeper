@@ -79,6 +79,16 @@ func AuthenticationMiddleware(
 				return
 			}
 
+			// Attempt to extract identity for logging purposes ONLY.
+			// This happens BEFORE token verification — the token may be invalid.
+			userForLogging, extractErr := session.ExtractIdentity(token)
+			if extractErr == nil {
+				lLog = lLog.With(
+					zap.String("user", userForLogging.Name),
+					zap.String("id", userForLogging.ID),
+				)
+			}
+
 			// IMPORTANT: For all calls with go-oidc library be aware
 			// that calls accept context parameter and you have to pass
 			// client from provider through this parameter, although
@@ -131,7 +141,14 @@ func AuthenticationMiddleware(
 					return
 				}
 
-				if !strings.Contains(err.Error(), "token is expired") {
+				if strings.Contains(err.Error(), "token is expired") {
+					// Add expiration info to logs
+					if extractErr == nil {
+						lLog = lLog.With(
+							zap.String("expired_on", userForLogging.ExpiresAt.String()),
+						)
+					}
+				} else {
 					lLog.Error(
 						apperrors.ErrAccTokenVerifyFailure.Error(),
 						zap.Error(err),
@@ -338,28 +355,17 @@ func AuthenticationMiddleware(
 
 				var encryptedRefreshToken string
 
-				if enableCompressToken {
-					encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
-					if err != nil {
-						lLog.Error(
-							apperrors.ErrEncryptRefreshToken.Error(),
-							zap.Error(err),
-						)
-						wrt.WriteHeader(http.StatusInternalServerError)
+				// Refresh tokens are always compressed regardless of
+				// enable-compress-token setting (they are large, stored in cookies).
+				encryptedRefreshToken, err = session.EncryptAndCompressToken(newRefreshToken, encryptionKey, compressTokenPool)
+				if err != nil {
+					lLog.Error(
+						apperrors.ErrEncryptAndCompressRefreshToken.Error(),
+						zap.Error(err),
+					)
+					wrt.WriteHeader(http.StatusInternalServerError)
 
-						return
-					}
-				} else {
-					encryptedRefreshToken, err = encryption.EncodeText(newRefreshToken, encryptionKey)
-					if err != nil {
-						lLog.Error(
-							apperrors.ErrEncryptRefreshToken.Error(),
-							zap.Error(err),
-						)
-						wrt.WriteHeader(http.StatusInternalServerError)
-
-						return
-					}
+					return
 				}
 
 				if store != nil {

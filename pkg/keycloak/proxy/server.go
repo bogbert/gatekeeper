@@ -57,6 +57,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -175,14 +176,63 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 	// initialize the openid client
 	svc.Provider, svc.IdpClient, err = svc.NewOpenIDProvider()
 	if err != nil {
-		svc.Log.Error(
-			"failed to get provider configuration from discovery",
+		if !config.EnableIDPReconnect {
+			svc.Log.Error(
+				"failed to get provider configuration from discovery",
+				zap.Error(err),
+			)
+			return nil, err //nolint:wsl_v5
+		}
+
+		svc.Log.Warn(
+			"failed to get provider configuration from discovery, retrying indefinitely",
 			zap.Error(err),
+			zap.Duration("interval", config.IDPReconnectInterval),
 		)
-		return nil, err //nolint:wsl_v5
+
+		for {
+			time.Sleep(config.IDPReconnectInterval)
+			svc.Provider, svc.IdpClient, err = svc.NewOpenIDProvider()
+			if err == nil {
+				break
+			}
+			svc.Log.Warn("still unable to connect to IDP, retrying...", zap.Error(err))
+		}
 	}
 
 	svc.Log.Info("successfully retrieved openid configuration from the discovery")
+
+	// External IDP enrichment initialization
+	if config.EnableExternalIDPEnrichment {
+		log.Info("initializing external IDP enrichment",
+			zap.String("users_file", config.ExtIDPUsersFile),
+			zap.String("match_claim", config.ExtIDPMatchClaim),
+			zap.String("match_field", config.ExtIDPUsersFileMatchField),
+		)
+
+		enricherConfig := externalidp.NewConfig(
+			config.EnableExternalIDPEnrichment,
+			config.ExtIDPUsersFile,
+			config.ExtIDPMatchClaim,
+			config.ExtIDPUsersFileMatchField,
+			config.ExtIDPUserFilter,
+			config.ExtIDPUserFilterIsRegex,
+			config.ExtIDPUsersFileReloadInterval,
+		)
+
+		externalIDPCache, cacheErr := externalidp.NewUserCache(enricherConfig, log)
+		if cacheErr != nil {
+			return nil, errors.Join(apperrors.ErrExternalIDPCacheInitFailed, cacheErr)
+		}
+
+		svc.ExternalIDPEnricher = externalidp.NewEnricher(externalIDPCache, enricherConfig)
+
+		stopCh := make(chan struct{})
+		svc.ExternalIDPStopCh = stopCh
+		go externalIDPCache.StartAutoReload(log, stopCh)
+
+		log.Info("external IDP enrichment enabled successfully")
+	}
 
 	if config.ClientID == "" && config.ClientSecret == "" {
 		log.Warn(
@@ -374,10 +424,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		}
 	}
 
-	var compressTokenPool *utils.LimitedBufferPool
-	if r.Config.EnableCompressToken {
-		compressTokenPool = utils.NewLimitedBufferPool(constant.CompressTokenPoolSize)
-	}
+	// Always create compressTokenPool since refresh tokens are always compressed
+	compressTokenPool := utils.NewLimitedBufferPool(constant.CompressTokenPoolSize)
 
 	// step: load the templates if any
 	tmpl := createTemplates(
@@ -575,6 +623,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableUserInfoClaims,
 		compressTokenPool,
 	)
+
+	extIDPMid := externalIDPEnrichmentMiddleware(r.Log, r.ExternalIDPEnricher, accessForbidden)
 
 	loginHand := loginHandler(
 		r.Log,
@@ -875,6 +925,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 		middlewares := []func(http.Handler) http.Handler{
 			authMid,
+			extIDPMid,
 			authFailMiddleware,
 			admissionMiddleware,
 		}
@@ -972,6 +1023,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 			middlewares = []func(http.Handler) http.Handler{
 				authMid,
+				extIDPMid,
 				authFailMiddleware,
 				authzMiddleware,
 				admissionMiddleware,
@@ -1353,6 +1405,11 @@ func (r *OauthProxy) Run() (context.Context, error) {
 
 // Shutdown finishes the proxy service with gracefully period.
 func (r *OauthProxy) Shutdown() error {
+	// Stop external IDP cache auto-reload
+	if r.ExternalIDPStopCh != nil {
+		close(r.ExternalIDPStopCh)
+	}
+
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		r.Config.ServerGraceTimeout,
