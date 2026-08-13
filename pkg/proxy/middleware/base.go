@@ -48,7 +48,14 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				req.URL.Path = "/" + req.URL.Path
 			}
 
-			req.URL.RawPath = req.URL.EscapedPath()
+			// Clear RawPath so routing works off the canonical, decoded Path.
+			// Go's URL.EscapedPath() preserves any non-canonical percent-encoding
+			// from the original request (e.g. "%6a" for "j"), and chi's router
+			// prefers URL.RawPath over URL.Path when it is set. Left untouched,
+			// a request such as /%6aoblauncher/ would fail to match the
+			// "/joblauncher*" resource rule - and therefore skip its role
+			// checks - while still being decoded normally by the upstream.
+			req.URL.RawPath = ""
 
 			resp := middleware.NewWrapResponseWriter(wrt, 1)
 			start := time.Now()
