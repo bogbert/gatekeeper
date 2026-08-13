@@ -48,7 +48,8 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				req.URL.Path = "/" + req.URL.Path
 			}
 
-			req.URL.RawPath = req.URL.EscapedPath()
+			// Clear RawPath so routing works off the canonical, decoded Path.
+			req.URL.RawPath = ""
 
 			resp := middleware.NewWrapResponseWriter(wrt, 1)
 			start := time.Now()
