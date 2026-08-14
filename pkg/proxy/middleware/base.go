@@ -28,8 +28,117 @@ const (
 	normalizeFlags purell.NormalizationFlags = purell.FlagRemoveDotSegments | purell.FlagRemoveDuplicateSlashes
 )
 
+// isUnreservedRFC3986 reports whether b is an RFC 3986 §2.3 unreserved
+// character. Percent-encoded octets of these bytes carry no special
+// meaning and can be safely decoded before resource rules are matched.
+func isUnreservedRFC3986(b byte) bool {
+	return (b >= 'A' && b <= 'Z') ||
+		(b >= 'a' && b <= 'z') ||
+		(b >= '0' && b <= '9') ||
+		b == '-' || b == '.' || b == '_' || b == '~'
+}
+
+func hexDigitValue(b byte) (byte, bool) {
+	switch {
+	case b >= '0' && b <= '9':
+		return b - '0', true
+	case b >= 'a' && b <= 'f':
+		return b - 'a' + 10, true
+	case b >= 'A' && b <= 'F':
+		return b - 'A' + 10, true
+	default:
+		return 0, false
+	}
+}
+
+func upperHexDigit(b byte) byte {
+	if b >= 'a' && b <= 'f' {
+		return b - 'a' + 'A'
+	}
+
+	return b
+}
+
+// normalizePathEncoding mirrors the RFC 3986 §6.2.2.2 percent-encoding
+// normalization rule that nginx and most reverse proxies also apply
+// before evaluating their routing rules: percent-encoded octets that
+// correspond to unreserved characters are decoded (e.g. "%6a" -> "j"),
+// while every other percent-encoding - reserved characters such as
+// "%2F" or "%3F", and malformed/incomplete escapes - is left untouched
+// (aside from canonicalizing the hex digits to uppercase).
+//
+// This keeps resource rules such as "uri=/joblauncher*" from being
+// bypassed by trivially percent-encoding otherwise-plain path
+// characters, without collapsing an encoded "%2F" into a literal path
+// separator, which could change which resource rule a request logically
+// belongs to.
+func normalizePathEncoding(raw string) string {
+	var buf strings.Builder
+	buf.Grow(len(raw))
+
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+
+		if c == '%' && i+2 < len(raw) {
+			hi, hiOk := hexDigitValue(raw[i+1])
+			lo, loOk := hexDigitValue(raw[i+2])
+
+			if hiOk && loOk {
+				decoded := hi<<4 | lo
+
+				if isUnreservedRFC3986(decoded) {
+					buf.WriteByte(decoded)
+				} else {
+					buf.WriteByte('%')
+					buf.WriteByte(upperHexDigit(raw[i+1]))
+					buf.WriteByte(upperHexDigit(raw[i+2]))
+				}
+
+				i += 2
+
+				continue
+			}
+		}
+
+		buf.WriteByte(c)
+	}
+
+	return buf.String()
+}
+
+// normalizeStructural applies the same dot-segment/duplicate-slash
+// canonicalization purell performs, plus the leading-slash fixup, to a bare
+// path string without touching its percent-encoding. Used to derive both the
+// fully-decoded and the RFC-3986-selective candidate paths from a common
+// code path.
+func normalizeStructural(path string) string {
+	u := &url.URL{Path: path}
+	purell.NormalizeURL(u, normalizeFlags)
+
+	if !strings.HasPrefix(u.Path, "/") {
+		u.Path = "/" + u.Path
+	}
+
+	return u.Path
+}
+
+// isOAuthControlPlanePath reports whether a fully-decoded, normalized path
+// falls under Gatekeeper's own internal control-plane prefix (e.g. /oauth).
+// That prefix has a single, fixed security posture (unlike user-defined
+// uri: resource rules), so there is no rule-confusion risk in recognizing it
+// via full decoding - and doing so keeps it robust against obfuscation
+// attempts, matching the pre-existing behavior this endpoint has always
+// relied on.
+func isOAuthControlPlanePath(fullyDecodedPath, oauthPrefix string) bool {
+	if oauthPrefix == "" {
+		return false
+	}
+
+	return fullyDecodedPath == oauthPrefix || strings.HasPrefix(fullyDecodedPath, oauthPrefix+"/")
+}
+
 // EntrypointMiddleware is custom filtering for incoming requests.
-func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
+func EntrypointMiddleware(logger *zap.Logger, oauthPrefix string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// @step: create a context for the request
@@ -39,17 +148,33 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			scope.RawPath = req.URL.RawPath
 			scope.Logger = logger
 
-			// We want to Normalize the URL so that we can more easily and accurately
-			// parse it to apply resource protection rules.
-			purell.NormalizeURL(req.URL, normalizeFlags)
+			// Compute two candidate paths for routing:
+			//
+			//  - fullyDecodedPath: legacy, fully-decoded-then-normalized
+			//    behavior. Used only to robustly recognize Gatekeeper's own
+			//    internal /oauth control-plane endpoints, which need to
+			//    resist obfuscation and have no per-request rule ambiguity.
+			//  - strictPath: percent-encoded reserved characters (e.g. %2F,
+			//    %3F) are left opaque, only RFC 3986 unreserved characters
+			//    are decoded. This is the representation used to match
+			//    user-configured uri: resource rules, so an encoded
+			//    reserved character can't make a request match a different
+			//    (weaker) resource rule than the literal string warrants.
+			//
+			// This mirrors nginx: location matching decodes/normalizes,
+			// but the original wire-format path (preserved in scope.Path /
+			// scope.RawPath and restored below) is what actually reaches
+			// the upstream.
+			fullyDecodedPath := normalizeStructural(req.URL.Path)
+			strictPath := normalizeStructural(normalizePathEncoding(req.URL.EscapedPath()))
 
-			// ensure we have a slash in the url
-			if !strings.HasPrefix(req.URL.Path, "/") {
-				req.URL.Path = "/" + req.URL.Path
+			matchPath := strictPath
+			if isOAuthControlPlanePath(fullyDecodedPath, oauthPrefix) {
+				matchPath = fullyDecodedPath
 			}
 
-			// Clear RawPath so routing works off the canonical, decoded Path.
-			req.URL.RawPath = ""
+			req.URL.Path = matchPath
+			req.URL.RawPath = matchPath
 
 			resp := middleware.NewWrapResponseWriter(wrt, 1)
 			start := time.Now()
