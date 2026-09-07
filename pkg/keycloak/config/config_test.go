@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//nolint:testpackage
+//nolint:testpackage,goconst
 package config
 
 import (
@@ -2067,6 +2067,7 @@ func TestIsStoreURLValid(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestIsResourceValid(t *testing.T) {
 	testCases := []struct {
 		Config *Config
@@ -2184,6 +2185,103 @@ func TestIsResourceValid(t *testing.T) {
 				},
 			},
 			Valid: false,
+		},
+		{
+			Name: "InValidResourceDenyWithWhiteListedConflict",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:         fakeAdminRoleURL,
+						Methods:     []string{"GET"},
+						Deny:        true,
+						WhiteListed: true,
+					},
+				},
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidResourceDenyWithWhiteListedAnonConflict",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:             fakeAdminRoleURL,
+						Methods:         []string{"GET"},
+						Deny:            true,
+						WhiteListedAnon: true,
+					},
+				},
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidResourceDenyWithRequiredAnyRoleConflict",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:            fakeAdminRoleURL,
+						Methods:        []string{"GET"},
+						Deny:           true,
+						RequireAnyRole: true,
+					},
+				},
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidResourceDenyWithRequiredAnyRoleConflict",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:            fakeAdminRoleURL,
+						Methods:        []string{"GET"},
+						Deny:           true,
+						RequireAnyRole: true,
+					},
+				},
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidResourceDenyWithRolesConflict",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:     fakeAdminRoleURL,
+						Methods: []string{"GET"},
+						Deny:    true,
+						Roles:   []string{fakeAdminRole},
+					},
+				},
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidResourceDenyWithRolesConflict",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:     fakeAdminRoleURL,
+						Methods: []string{"GET"},
+						Deny:    true,
+						Groups:  []string{fakeAdminRole},
+					},
+				},
+			},
+			Valid: false,
+		},
+		{
+			Name: "ValidResourceDeny",
+			Config: &Config{
+				Resources: []*core.Resource{
+					{
+						URL:     fakeAdminRoleURL,
+						Methods: []string{"GET"},
+						Deny:    true,
+					},
+				},
+			},
+			Valid: true,
 		},
 	}
 
@@ -3581,6 +3679,107 @@ func TestIsMaxBodySizeValid(t *testing.T) {
 			testCase.Name,
 			func(t *testing.T) {
 				err := testCase.Config.isMaxBodySizeValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestIsLogSamplingValid(t *testing.T) {
+	testCases := []struct {
+		Config *Config
+		Name   string
+		Valid  bool
+	}{
+		{
+			Name: "ValidLogSampling",
+			Config: &Config{
+				LogSamplingInitial: 10,
+				LogSamplingAfter:   1000,
+			},
+			Valid: true,
+		},
+		{
+			Name: "ValidLogSamplingZeros",
+			Config: &Config{
+				LogSamplingInitial: 0,
+				LogSamplingAfter:   0,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidLogSamplingInitial",
+			Config: &Config{
+				LogSamplingInitial: -10,
+				LogSamplingAfter:   10,
+			},
+			Valid: false,
+		},
+		{
+			Name: "InValidLogSamplingAfter",
+			Config: &Config{
+				LogSamplingInitial: 240,
+				LogSamplingAfter:   -100,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isLogSamplingValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestIsMaxHeadersValid(t *testing.T) {
+	testCases := []struct {
+		Config *Config
+		Name   string
+		Valid  bool
+	}{
+		{
+			Name:   "ValidEmptyMaxHeaders",
+			Config: &Config{},
+			Valid:  true,
+		},
+		{
+			Name: "ValidMaxHeaders",
+			Config: &Config{
+				MaxHeaders: 1000,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InValidMaxHeaders",
+			Config: &Config{
+				MaxHeaders: -2,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isMaxHeadersValid()
 				if err != nil && testCase.Valid {
 					t.Fatalf("Expected test not to fail")
 				}

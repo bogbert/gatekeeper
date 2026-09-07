@@ -1,3 +1,4 @@
+//nolint:goconst
 package e2e_test
 
 import (
@@ -73,6 +74,7 @@ var _ = Describe("Code Flow login/logout compression and encryption Auth Scheme 
 			"--skip-access-token-issuer-check=true",
 			"--enable-idp-session-check=false",
 			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
 			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--resources=uri=" + testPath + "|no-redirect=true",
 			"--openid-provider-retry-count=30",
@@ -105,7 +107,8 @@ var _ = Describe("Code Flow login/logout compression and encryption Auth Scheme 
 	})
 
 	When("Performing standard login", func() {
-		It("should login with user/password and logout successfully",
+		It(
+			"should login with user/password and logout successfully",
 			Label("code_flow"),
 			Label("compression_auth_scheme"),
 			Label("auth_scheme_cookie"),

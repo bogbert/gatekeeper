@@ -142,9 +142,19 @@ type Config struct {
 	SelfSignedTLSExpiration            time.Duration     `env:"SELF_SIGNED_TLS_EXPIRATION" json:"self-signed-tls-expiration,omitempty" usage:"the expiration of the certificate before rotation" yaml:"self-signed-tls-expiration"`
 	MaxTokenSize                       int               `env:"MAX_TOKEN_SIZE" json:"max-token-size,omitempty" usage:"maximum size of token in bytes" yaml:"max-token-size"`
 	MaxBodySize                        int               `env:"MAX_BODY_SIZE" json:"max-body-size,omitempty" usage:"maximum body size in bytes" yaml:"max-body-size"`
+	MaxHeaders                         int               `env:"MAX_HEADERS" json:"max-headers,omitempty" usage:"maximum number of headers in request" yaml:"max-headers"`
 	MaxHeaderSize                      int               `env:"MAX_HEADER_SIZE" json:"max-header-size,omitempty" usage:"maximum total headers size in bytes" yaml:"max-header-size"`
+	LogSamplingInitial                 int               `env:"LOG_SAMPLING_INITIAL" json:"log-sampling-initial" usage:"initial number of messages logged, after that sampling turns on" yaml:"log-sampling-initial"`
+	LogSamplingAfter                   int               `env:"LOG_SAMPLING_AFTER" json:"log-sampling-after" usage:"each n-th number message is logged, after initial messages logged" yaml:"log-sampling-after"`
 	OpenIDProviderRetryCount           int               `env:"OPENID_PROVIDER_RETRY_COUNT" json:"openid-provider-retry-count,omitempty" usage:"number of retries for retrieving openid configuration" yaml:"openid-provider-retry-count"`
 	OpenIDProviderTimeout              time.Duration     `env:"OPENID_PROVIDER_TIMEOUT" json:"openid-provider-timeout,omitempty" usage:"timeout for openid configuration on .well-known/openid-configuration" yaml:"openid-provider-timeout"`
+	AllowEscapedSlashesPath            bool              `env:"ALLOW_ESCAPED_SLASHES_PATH" json:"allow-escaped-slashes-path" usage:"this allows/dissallows escaped slashes in request path" yaml:"allow-escaped-slashes-path"`
+	NormalizePath                      bool              `env:"NORMALIZE_PATH" json:"normalize-path" usage:"normalizes path according RFC 3986, except slashes, at start of processing chain, used in internal chains" yaml:"normalize-path"`
+	NormalizePathUpstream              bool              `env:"NORMALIZE_PATH_UPSTREAM" json:"normalize-path-upstream" usage:"normalizes path for upstream according RFC 3986, except slashes" yaml:"normalize-path-upstream"`
+	MergeSlashes                       bool              `env:"MERGE_SLASHES" json:"merge-slashes" usage:"merges slashes at start of processing, at start of processing chain, used in internal chains" yaml:"merge-slashes"`
+	MergeSlashesUpstream               bool              `env:"MERGE_SLASHES_UPSTREAM" json:"merge-slashes-upstream" usage:"merges slashes for path to upstream" yaml:"merge-slashes-upstream"`
+	PathEscapedSlashes                 bool              `env:"PATH_ESCAPED_SLASHES" json:"path-escaped-slashes" usage:"escape slashes, means preserve hex encoding, at start of processing chain, used in internal chains" yaml:"path-escaped-slashes"`
+	PathEscapedSlashesUpstream         bool              `env:"PATH_ESCAPED_SLASHES_UPSTREAM" json:"path-escaped-slashes-upstream" usage:"escape slashes, means preserve hex encoding for path sent upstream" yaml:"path-escaped-slashes-upstream"`
 	EnableProfiling                    bool              `env:"ENABLE_PROFILING" json:"enable-profiling" usage:"switching on the golang profiling via pprof on /debug/pprof, /debug/pprof/heap etc" yaml:"enable-profiling"`
 	EnableIDPSessionCheck              bool              `env:"ENABLE_IDP_SESSION_CHECK" json:"enable-idp-session-check" usage:"during token validation it also checks if user session is still present, useful for multiapp logout" yaml:"enable-idp-session-check"`
 	EnabledSelfSignedTLS               bool              `env:"ENABLE_SELF_SIGNED_TLS" json:"enable-self-signed-tls" usage:"create self signed certificates for the proxy" yaml:"enable-self-signed-tls"`
@@ -211,17 +221,17 @@ type Config struct {
 	IsDiscoverURILegacy                bool              `json:"-"`
 
 	// External IDP enrichment configuration
-	EnableExternalIDPEnrichment        bool              `env:"ENABLE_EXTERNAL_IDP_ENRICHMENT" json:"enable-external-idp-enrichment,omitempty" usage:"enable enrichment of external IDP tokens with Keycloak user data" yaml:"enable-external-idp-enrichment"`
-	ExtIDPUsersFile                    string            `env:"EXTIDP_USERS_FILE" json:"extidp-users-file,omitempty" usage:"path to JSON file containing Keycloak users data for enrichment" yaml:"extidp-users-file"`
-	ExtIDPMatchClaim                   string            `env:"EXTIDP_MATCH_CLAIM" json:"extidp-match-claim,omitempty" usage:"claim name in external IDP token to match users (e.g. preferred_username, email)" yaml:"extidp-match-claim"`
-	ExtIDPUsersFileMatchField          string            `env:"EXTIDP_USERS_FILE_MATCH_FIELD" json:"extidp-users-file-match-field,omitempty" usage:"field name in users file to match against (username or email)" yaml:"extidp-users-file-match-field"`
-	ExtIDPUserFilter                   string            `env:"EXTIDP_USER_FILTER" json:"extidp-user-filter,omitempty" usage:"filter to identify users (literal string or regex), empty means no filter" yaml:"extidp-user-filter"`
-	ExtIDPUserFilterIsRegex            bool              `env:"EXTIDP_USER_FILTER_IS_REGEX" json:"extidp-user-filter-is-regex,omitempty" usage:"treat extidp-user-filter as regex pattern" yaml:"extidp-user-filter-is-regex"`
-	ExtIDPUsersFileReloadInterval      time.Duration     `env:"EXTIDP_USERS_FILE_RELOAD_INTERVAL" json:"extidp-users-file-reload-interval,omitempty" usage:"interval to check for users file updates" yaml:"extidp-users-file-reload-interval"`
+	EnableExternalIDPEnrichment   bool          `env:"ENABLE_EXTERNAL_IDP_ENRICHMENT" json:"enable-external-idp-enrichment,omitempty" usage:"enable enrichment of external IDP tokens with Keycloak user data" yaml:"enable-external-idp-enrichment"`
+	ExtIDPUsersFile               string        `env:"EXTIDP_USERS_FILE" json:"extidp-users-file,omitempty" usage:"path to JSON file containing Keycloak users data for enrichment" yaml:"extidp-users-file"`
+	ExtIDPMatchClaim              string        `env:"EXTIDP_MATCH_CLAIM" json:"extidp-match-claim,omitempty" usage:"claim name in external IDP token to match users (e.g. preferred_username, email)" yaml:"extidp-match-claim"`
+	ExtIDPUsersFileMatchField     string        `env:"EXTIDP_USERS_FILE_MATCH_FIELD" json:"extidp-users-file-match-field,omitempty" usage:"field name in users file to match against (username or email)" yaml:"extidp-users-file-match-field"`
+	ExtIDPUserFilter              string        `env:"EXTIDP_USER_FILTER" json:"extidp-user-filter,omitempty" usage:"filter to identify users (literal string or regex), empty means no filter" yaml:"extidp-user-filter"`
+	ExtIDPUserFilterIsRegex       bool          `env:"EXTIDP_USER_FILTER_IS_REGEX" json:"extidp-user-filter-is-regex,omitempty" usage:"treat extidp-user-filter as regex pattern" yaml:"extidp-user-filter-is-regex"`
+	ExtIDPUsersFileReloadInterval time.Duration `env:"EXTIDP_USERS_FILE_RELOAD_INTERVAL" json:"extidp-users-file-reload-interval,omitempty" usage:"interval to check for users file updates" yaml:"extidp-users-file-reload-interval"`
 
 	// IDP reconnect configuration
-	EnableIDPReconnect                 bool              `env:"ENABLE_IDP_RECONNECT" json:"enable-idp-reconnect,omitempty" usage:"retry connecting to IDP indefinitely at startup instead of exiting" yaml:"enable-idp-reconnect"`
-	IDPReconnectInterval               time.Duration     `env:"IDP_RECONNECT_INTERVAL" json:"idp-reconnect-interval,omitempty" usage:"interval between IDP reconnection attempts once initial retries are exhausted" yaml:"idp-reconnect-interval"`
+	EnableIDPReconnect   bool          `env:"ENABLE_IDP_RECONNECT" json:"enable-idp-reconnect,omitempty" usage:"retry connecting to IDP indefinitely at startup instead of exiting" yaml:"enable-idp-reconnect"`
+	IDPReconnectInterval time.Duration `env:"IDP_RECONNECT_INTERVAL" json:"idp-reconnect-interval,omitempty" usage:"interval between IDP reconnection attempts once initial retries are exhausted" yaml:"idp-reconnect-interval"`
 }
 
 func NewDefaultConfig() *Config {
@@ -243,7 +253,8 @@ func NewDefaultConfig() *Config {
 		CookiePKCEName:                   constant.PKCECookie,
 		EnableAuthorizationCookies:       true,
 		EnableAuthorizationHeader:        true,
-		EnableDefaultDeny:                true,
+		EnableDefaultDeny:                false,
+		EnableDefaultDenyStrict:          true,
 		EnableSessionCookies:             true,
 		EnableTokenHeader:                true,
 		EnableJSONLogging:                true,
@@ -292,6 +303,15 @@ func NewDefaultConfig() *Config {
 		PatRetryCount:                    constant.DefaultPatRetryCount,
 		PatRetryInterval:                 constant.DefaultPatRetryInterval,
 		OpaTimeout:                       constant.DefaultOpaTimeout,
+		LogSamplingInitial:               constant.DefaultLogSamplingInitial,
+		LogSamplingAfter:                 constant.DefaultLogSamplingAfter,
+		NormalizePath:                    true,
+		NormalizePathUpstream:            true,
+		MergeSlashes:                     true,
+		MergeSlashesUpstream:             true,
+		PathEscapedSlashes:               false,
+		PathEscapedSlashesUpstream:       false,
+		AllowEscapedSlashesPath:          false,
 
 		EnableExternalIDPEnrichment:   false,
 		ExtIDPMatchClaim:              "preferred_username",
@@ -393,6 +413,7 @@ func (r *Config) IsValid(fileCheckEnable bool) error {
 		r.isReverseProxySettingsValid,
 		r.isCookieValid,
 		r.isEnableCompressTokenValid,
+		r.isLogSamplingValid,
 	}
 
 	for _, validationFunc := range validationRegistry {
@@ -705,6 +726,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isEnableIDTokenClaimsValid,
 			r.isExcludeClaimsValid,
 			r.isMaxTokenSizeValid,
+			r.isMaxHeadersValid,
 			r.isExternalIDPEnrichmentValid,
 		}
 
@@ -1299,6 +1321,22 @@ func (r *Config) isExternalIDPEnrichmentValid() error {
 		if r.ExtIDPUsersFileReloadInterval <= 0 {
 			return fmt.Errorf("extidp-users-file-reload-interval must be positive")
 		}
+	}
+
+	return nil
+}
+
+func (r *Config) isLogSamplingValid() error {
+	if r.LogSamplingInitial < 0 || r.LogSamplingAfter < 0 {
+		return apperrors.ErrInvalidLogSampling
+	}
+
+	return nil
+}
+
+func (r *Config) isMaxHeadersValid() error {
+	if r.MaxHeaders < 0 {
+		return apperrors.ErrInvalidMaxHeaders
 	}
 
 	return nil

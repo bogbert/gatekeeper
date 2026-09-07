@@ -421,13 +421,15 @@ func oauthCallbackHandler(
 			}
 		case encryptedAndCompressed:
 			accessToken, err = core.EncryptAndCompressToken(
-				scope, accessToken, encryptionKey, "access", compressTokenPool, writer)
+				scope, accessToken, encryptionKey, "access", compressTokenPool, writer,
+			)
 			if err != nil {
 				return
 			}
 
 			identityToken, err = core.EncryptAndCompressToken(
-				scope, identityToken, encryptionKey, "id", compressTokenPool, writer)
+				scope, identityToken, encryptionKey, "id", compressTokenPool, writer,
+			)
 			if err != nil {
 				return
 			}
@@ -764,7 +766,8 @@ func loginHandler(
 			return http.StatusOK, nil
 		}(ctx)
 		if err != nil {
-			scope.Logger.Error(err.Error(),
+			scope.Logger.Error(
+				err.Error(),
 				zap.String("remote_addr", req.RemoteAddr),
 			)
 			writer.WriteHeader(code)
@@ -999,7 +1002,7 @@ func logoutHandler(
 
 			start := time.Now()
 
-			response, err := httpClient.Do(request) //nolint:gosec
+			response, err := httpClient.Do(request)
 			if err != nil {
 				scope.Logger.Error(apperrors.ErrRevocationReqFailure.Error(), zap.Error(err))
 				writer.WriteHeader(http.StatusInternalServerError)

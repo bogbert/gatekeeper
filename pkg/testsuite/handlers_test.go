@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:goconst
 package testsuite_test
 
 import (
@@ -924,10 +925,10 @@ func TestAuthorizationURL(t *testing.T) {
 					ExpectedCode:     http.StatusSeeOther,
 				},
 				{
-					URI:              "/help/../admin",
-					Redirects:        true,
-					ExpectedLocation: "/oauth/authorize?state",
-					ExpectedCode:     http.StatusSeeOther,
+					URI:           "/help/../admin",
+					Redirects:     true,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
 				},
 				{
 					URI:              "/admin?test=yes&test1=test",

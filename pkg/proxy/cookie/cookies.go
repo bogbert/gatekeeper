@@ -67,7 +67,7 @@ func (cm *Manager) DropCookie(
 		path = cm.BaseURI
 	}
 
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ //nolint:gosec
 		Domain:   domain,
 		HttpOnly: cm.HTTPOnlyCookie,
 		Name:     name,
@@ -177,7 +177,10 @@ func (cm *Manager) DropStateParameterCookie(req *http.Request, wrt http.Response
 		wrt.WriteHeader(http.StatusInternalServerError)
 	}
 
-	requestURI := req.URL.RequestURI()
+	requestURI := req.URL.RawPath
+	if req.URL.RawQuery != "" {
+		requestURI += "?" + req.URL.RawQuery
+	}
 
 	if cm.NoProxy && !cm.NoRedirects {
 		xReqURI := req.Header.Get(constant.HeaderXForwardedURI)
@@ -282,7 +285,7 @@ func FilterCookies(req *http.Request, filter []string) error {
 		// @step: does this cookie match our filter?
 		for _, n := range filter {
 			if strings.HasPrefix(cookie.Name, n) {
-				req.AddCookie(&http.Cookie{Name: cookie.Name, Value: "censored"})
+				req.AddCookie(&http.Cookie{Name: cookie.Name, Value: "censored"}) //nolint:gosec
 
 				found = true
 

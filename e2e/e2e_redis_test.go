@@ -1,3 +1,4 @@
+//nolint:goconst
 package e2e_test
 
 import (
@@ -57,6 +58,9 @@ var _ = Describe("Code Flow PKCE login/logout with mTLS REDIS", func() {
 			"--client-secret=" + pkceTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=false",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
@@ -83,7 +87,8 @@ var _ = Describe("Code Flow PKCE login/logout with mTLS REDIS", func() {
 	})
 
 	When("Peforming standard login", func() {
-		It("should login with user/password and logout successfully",
+		It(
+			"should login with user/password and logout successfully",
 			Label("code_flow", "pkce", "redis"),
 			func(_ context.Context) {
 				var err error
@@ -157,6 +162,9 @@ var _ = Describe("Code Flow PKCE login/logout with mTLS REDIS CLUSTER", func() {
 			"--client-secret=" + pkceTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=false",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
@@ -186,7 +194,8 @@ var _ = Describe("Code Flow PKCE login/logout with mTLS REDIS CLUSTER", func() {
 	})
 
 	When("Peforming standard login", func() {
-		It("should login with user/password and logout successfully",
+		It(
+			"should login with user/password and logout successfully",
 			Label("code_flow", "pkce", "redis_cluster"),
 			func(_ context.Context) {
 				var err error
@@ -260,6 +269,9 @@ var _ = Describe("Code Flow PKCE login/logout with mTLS REDIS SENTINEL", func() 
 			"--client-secret=" + pkceTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=false",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
@@ -289,7 +301,8 @@ var _ = Describe("Code Flow PKCE login/logout with mTLS REDIS SENTINEL", func() 
 	})
 
 	When("Peforming standard login", func() {
-		It("should login with user/password and logout successfully",
+		It(
+			"should login with user/password and logout successfully",
 			Label("code_flow", "pkce", "redis_cluster"),
 			func(_ context.Context) {
 				var err error

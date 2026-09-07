@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:goconst
 package core_test
 
 import (
@@ -22,6 +23,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -125,9 +127,10 @@ func TestResourceParseOk(t *testing.T) {
 			Ok: true,
 		},
 		{
-			Option: "uri=/*|methods=any",
+			Option: "uri=/allow_me_anon|deny=true",
 			Resource: &core.Resource{
-				URL:     "/*",
+				URL:     "/allow_me_anon",
+				Deny:    true,
 				Methods: utils.AllHTTPMethods,
 			},
 			Ok: true,
@@ -135,7 +138,15 @@ func TestResourceParseOk(t *testing.T) {
 		{
 			Option: "uri=/*|methods=any",
 			Resource: &core.Resource{
-				URL:     "/*",
+				URL:     constant.AllPath,
+				Methods: utils.AllHTTPMethods,
+			},
+			Ok: true,
+		},
+		{
+			Option: "uri=/*|methods=any",
+			Resource: &core.Resource{
+				URL:     constant.AllPath,
 				Methods: utils.AllHTTPMethods,
 			},
 			Ok: true,
@@ -143,7 +154,7 @@ func TestResourceParseOk(t *testing.T) {
 		{
 			Option: "uri=/*|groups=admin,test",
 			Resource: &core.Resource{
-				URL:     "/*",
+				URL:     constant.AllPath,
 				Methods: utils.AllHTTPMethods,
 				Groups:  []string{"admin", "test"},
 			},
@@ -152,7 +163,7 @@ func TestResourceParseOk(t *testing.T) {
 		{
 			Option: "uri=/*|groups=admin",
 			Resource: &core.Resource{
-				URL:     "/*",
+				URL:     constant.AllPath,
 				Methods: utils.AllHTTPMethods,
 				Groups:  []string{"admin"},
 			},
@@ -161,7 +172,7 @@ func TestResourceParseOk(t *testing.T) {
 		{
 			Option: "uri=/*|require-any-role=true",
 			Resource: &core.Resource{
-				URL:            "/*",
+				URL:            constant.AllPath,
 				Methods:        utils.AllHTTPMethods,
 				RequireAnyRole: true,
 			},
@@ -197,6 +208,59 @@ func TestIsValid(t *testing.T) {
 		{
 			Resource: &core.Resource{URL: "/", Methods: utils.AllHTTPMethods},
 			Ok:       true,
+		},
+		{
+			Resource: &core.Resource{
+				URL:     "/",
+				Methods: utils.AllHTTPMethods,
+				Deny:    true,
+			},
+			Ok: true,
+		},
+		{
+			Resource: &core.Resource{
+				URL:         "/",
+				Methods:     utils.AllHTTPMethods,
+				Deny:        true,
+				WhiteListed: true,
+			},
+			Ok: false,
+		},
+		{
+			Resource: &core.Resource{
+				URL:             "/",
+				Methods:         utils.AllHTTPMethods,
+				Deny:            true,
+				WhiteListedAnon: true,
+			},
+			Ok: false,
+		},
+		{
+			Resource: &core.Resource{
+				URL:            "/",
+				Methods:        utils.AllHTTPMethods,
+				Deny:           true,
+				RequireAnyRole: true,
+			},
+			Ok: false,
+		},
+		{
+			Resource: &core.Resource{
+				URL:     "/",
+				Methods: utils.AllHTTPMethods,
+				Deny:    true,
+				Roles:   []string{"deny_role"},
+			},
+			Ok: false,
+		},
+		{
+			Resource: &core.Resource{
+				URL:     "/",
+				Methods: utils.AllHTTPMethods,
+				Deny:    true,
+				Groups:  []string{"deny_group"},
+			},
+			Ok: false,
 		},
 		{
 			Resource: &core.Resource{URL: "/admin/", Methods: utils.AllHTTPMethods},

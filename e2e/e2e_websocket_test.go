@@ -1,3 +1,4 @@
+//nolint:goconst
 package e2e_test
 
 import (
@@ -67,6 +68,8 @@ var _ = Describe("NoRedirects Websocket login/logout", func() {
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=true",
 			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--skip-access-token-clientid-check=true",
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
@@ -85,7 +88,8 @@ var _ = Describe("NoRedirects Websocket login/logout", func() {
 	})
 
 	When("Performing standard login", func() {
-		It("should login with service account and logout successfully",
+		It(
+			"should login with service account and logout successfully",
 			Label("api_flow"),
 			Label("websocket"),
 			func(ctx context.Context) {
@@ -98,7 +102,8 @@ var _ = Describe("NoRedirects Websocket login/logout", func() {
 
 				rClient := resty.New()
 				hClient := rClient.SetTLSClientConfig(
-					&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13}).GetClient()
+					&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13},
+				).GetClient()
 				oidcLibCtx := context.WithValue(ctx, oauth2.HTTPClient, hClient)
 
 				respToken, err := conf.Token(oidcLibCtx)
@@ -150,7 +155,8 @@ var _ = Describe("NoRedirects Websocket login/logout", func() {
 	})
 
 	When("Performing websocket connection on http backend", func() {
-		It("websocket upgrade should fail",
+		It(
+			"websocket upgrade should fail",
 			Label("api_flow"),
 			Label("websocket_fail"),
 			func(ctx context.Context) {
@@ -163,7 +169,8 @@ var _ = Describe("NoRedirects Websocket login/logout", func() {
 
 				rClient := resty.New()
 				hClient := rClient.SetTLSClientConfig(
-					&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13}).GetClient()
+					&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13},
+				).GetClient()
 				oidcLibCtx := context.WithValue(ctx, oauth2.HTTPClient, hClient)
 
 				respToken, err := conf.Token(oidcLibCtx)
@@ -188,8 +195,12 @@ var _ = Describe("NoRedirects Websocket login/logout", func() {
 				rClient = resty.New()
 				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 
+				respToken, err = conf.Token(oidcLibCtx)
+				Expect(err).NotTo(HaveOccurred())
+
 				request := rClient.SetRedirectPolicy(
-					resty.NoRedirectPolicy()).R().SetAuthToken(respToken.AccessToken)
+					resty.NoRedirectPolicy(),
+				).R().SetAuthToken(respToken.AccessToken)
 				resp, err := request.Get(proxyAddress)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
@@ -249,6 +260,7 @@ var _ = Describe("Code Flow websocket login/logout", func() {
 			"--skip-access-token-issuer-check=true",
 			"--enable-idp-session-check=false",
 			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
 			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--openid-provider-retry-count=30",
 			"--enable-refresh-tokens=true",
@@ -271,7 +283,8 @@ var _ = Describe("Code Flow websocket login/logout", func() {
 	})
 
 	When("Performing standard websocket login", func() {
-		It("should login with user/password and logout successfully",
+		It(
+			"should login with user/password and logout successfully",
 			Label("code_flow"),
 			Label("basic_case"),
 			func(_ context.Context) {
@@ -345,7 +358,8 @@ var _ = Describe("Code Flow websocket login/logout", func() {
 	})
 
 	When("Performing websocket connection on http backend", func() {
-		It("websocket upgrade should fail",
+		It(
+			"websocket upgrade should fail",
 			Label("code_flow"),
 			Label("websocket"),
 			func(_ context.Context) {

@@ -49,6 +49,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	keycloak_client "github.com/gogatekeeper/gatekeeper/pkg/keycloak/client"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
@@ -57,7 +58,6 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
-	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/externalidp"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -71,7 +71,7 @@ import (
 
 //nolint:gochecknoinits
 func init() {
-	_, err := memlimit.SetGoMemLimitWithOpts(
+	_, err := memlimit.Set(
 		memlimit.WithProvider(
 			memlimit.ApplyFallback(
 				memlimit.FromCgroup,
@@ -334,6 +334,8 @@ func createLogger(config *config.Config) (*zap.Logger, error) {
 	cfg := zap.NewProductionConfig()
 	cfg.DisableStacktrace = true
 	cfg.DisableCaller = true
+	cfg.Sampling.Initial = config.LogSamplingInitial
+	cfg.Sampling.Thereafter = config.LogSamplingAfter
 
 	// Use human-readable timestamps in the logs until KEYCLOAK-12100 is fixed
 	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -368,6 +370,10 @@ func (r *OauthProxy) useDefaultStack(
 		engine.MethodNotAllowed(handlers.EmptyHandler)
 	}
 
+	if r.Config.MaxHeaders > 0 {
+		engine.Use(gmiddleware.MaxHeadersMiddleware(r.Log, r.Config.MaxHeaders))
+	}
+
 	if r.Config.MaxBodySize > 0 {
 		engine.Use(gmiddleware.MaxBodySizeMiddleware(r.Log, r.Config.MaxBodySize))
 	}
@@ -385,7 +391,17 @@ func (r *OauthProxy) useDefaultStack(
 	}
 
 	// @step: enable the entrypoint middleware
-	engine.Use(gmiddleware.EntrypointMiddleware(r.Log))
+	engine.Use(gmiddleware.EntrypointMiddleware(
+		r.Log,
+		r.Config.NormalizePath,
+		r.Config.NormalizePathUpstream,
+		r.Config.MergeSlashes,
+		r.Config.MergeSlashesUpstream,
+		r.Config.PathEscapedSlashes,
+		r.Config.PathEscapedSlashesUpstream,
+		r.Config.AllowEscapedSlashesPath,
+		accessForbidden,
+	))
 
 	if r.Config.NoProxy {
 		engine.Use(gmiddleware.ForwardAuthMiddleware(r.Log, r.Config.OAuthURI))
@@ -774,15 +790,16 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			}
 
 			eng.Get(constant.CallbackURL, oauthCallbackHand)
-			eng.Get(constant.ExpiredURL, handlers.ExpirationHandler(
-				r.Log,
-				r.Provider,
-				r.Config.ClientID,
-				r.Config.SkipAccessTokenClientIDCheck,
-				r.Config.SkipAccessTokenIssuerCheck,
-				getIdentity,
-				r.Config.CookieAccessName,
-			),
+			eng.Get(
+				constant.ExpiredURL, handlers.ExpirationHandler(
+					r.Log,
+					r.Provider,
+					r.Config.ClientID,
+					r.Config.SkipAccessTokenClientIDCheck,
+					r.Config.SkipAccessTokenIssuerCheck,
+					getIdentity,
+					r.Config.CookieAccessName,
+				),
 			)
 
 			if r.Config.EnableLogoutAuth {
@@ -899,140 +916,69 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			zap.String("resource", res.String()),
 		)
 
-		authFailMiddleware := redToAuthMiddleware
-		if res.NoRedirect || r.Config.NoRedirects {
-			authFailMiddleware = noredToAuthMiddleware
-		}
-
-		admissionMiddleware := gmiddleware.AdmissionMiddleware(
-			r.Log,
-			res,
-			r.Config.MatchClaims,
-			accessForbidden,
+		var (
+			signMid func(http.Handler) http.Handler
+			hRouter chi.Router
+			eProt   chi.Router
 		)
 
-		identityMiddleware := gmiddleware.IdentityHeadersMiddleware(
-			r.Log,
-			r.Config.AddClaims,
-			r.Config.ExcludeClaims,
-			r.Config.CookieAccessName,
-			r.Config.CookieRefreshName,
-			r.Config.NoProxy,
-			r.Config.EnableTokenHeader,
-			r.Config.EnableAuthorizationHeader,
-			r.Config.EnableAuthorizationCookies,
-			r.Config.EnableHeaderEncoding,
-			r.Config.EnableIDTokenClaims,
-			r.Config.EnableUserInfoClaims,
-		)
+		if !res.Deny {
+			authFailMiddleware := redToAuthMiddleware
+			if res.NoRedirect || r.Config.NoRedirects {
+				authFailMiddleware = noredToAuthMiddleware
+			}
 
-		middlewares := []func(http.Handler) http.Handler{
-			authMid,
-			extIDPMid,
-			authFailMiddleware,
-			admissionMiddleware,
-		}
-
-		if r.Config.EnableLoA && res.NoRedirect {
-			r.Log.Warn(
-				"disabling LoA for resource, no-redirect=true for resource",
-				zap.String("resource", res.URL))
-		}
-
-		var loAMid func(http.Handler) http.Handler
-
-		if r.Config.EnableLoA && !res.NoRedirect {
-			loAMid = levelOfAuthenticationMiddleware(
+			admissionMiddleware := gmiddleware.AdmissionMiddleware(
 				r.Log,
-				r.Config.Scopes,
-				r.Config.EnablePKCE,
-				r.Config.SignInPage,
-				r.Cm,
-				newOAuth2Config,
-				getRedirectionURL,
-				customSignInPage,
 				res,
+				r.Config.MatchClaims,
 				accessForbidden,
 			)
-			middlewares = append(
-				middlewares,
-				loAMid,
-			)
-		}
 
-		middlewares = append(
-			middlewares,
-			identityMiddleware,
-		)
-
-		var signMid func(http.Handler) http.Handler
-		if r.Config.EnableSigning && !r.Config.NoProxy {
-			signMid = SigningMiddleware(
+			identityMiddleware := gmiddleware.IdentityHeadersMiddleware(
 				r.Log,
-				r.pat,
-				r.Config.ForwardingDomains,
-			)
-			middlewares = append(
-				middlewares,
-				signMid,
-			)
-		}
-
-		if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
-			middlewares = []func(http.Handler) http.Handler{
-				gmiddleware.DenyMiddleware(r.Log, accessForbidden),
-				gmiddleware.ProxyDenyMiddleware(r.Log),
-			}
-		}
-
-		if r.Config.EnableUma || r.Config.EnableOpa {
-			enableUma := r.Config.EnableUma
-			if r.Config.EnableUma && res.NoRedirect {
-				enableUma = false
-
-				r.Log.Warn(
-					"disabling EnableUma for resource, no-redirect=true for resource",
-					zap.String("resource", res.URL))
-			}
-
-			authzMiddleware := authorizationMiddleware(
-				r.Log,
-				enableUma,
-				r.Config.EnableUmaMethodScope,
-				r.Config.CookieUMAName,
+				r.Config.AddClaims,
+				r.Config.ExcludeClaims,
+				r.Config.CookieAccessName,
+				r.Config.CookieRefreshName,
 				r.Config.NoProxy,
-				r.pat,
-				r.Provider,
-				r.IdpClient,
-				r.Config.OpenIDProviderTimeout,
-				r.Config.Realm,
-				r.Config.EnableEncryptedToken,
-				r.Config.ForceEncryptedCookie,
-				r.Config.EncryptionKey,
-				r.Cm,
-				r.Config.EnableOpa,
-				r.Config.OpaTimeout,
-				r.Config.OpaAuthzURL,
-				r.Config.DiscoveryURI,
-				r.Config.ClientID,
-				r.Config.SkipAccessTokenClientIDCheck,
-				r.Config.SkipAccessTokenIssuerCheck,
-				r.Config.EnableCompressToken,
-				r.Config.CompressTokenOnlyAuthScheme,
-				compressTokenPool,
-				getIdentity,
-				accessForbidden,
+				r.Config.EnableTokenHeader,
+				r.Config.EnableAuthorizationHeader,
+				r.Config.EnableAuthorizationCookies,
+				r.Config.EnableHeaderEncoding,
+				r.Config.EnableIDTokenClaims,
+				r.Config.EnableUserInfoClaims,
 			)
 
-			middlewares = []func(http.Handler) http.Handler{
+			middlewares := []func(http.Handler) http.Handler{
 				authMid,
 				extIDPMid,
 				authFailMiddleware,
-				authzMiddleware,
 				admissionMiddleware,
 			}
 
+			if r.Config.EnableLoA && res.NoRedirect {
+				r.Log.Warn(
+					"disabling LoA for resource, no-redirect=true for resource",
+					zap.String("resource", res.URL),
+				)
+			}
+
+			var loAMid func(http.Handler) http.Handler
+
 			if r.Config.EnableLoA && !res.NoRedirect {
+				loAMid = levelOfAuthenticationMiddleware(
+					r.Log,
+					r.Config.Scopes,
+					r.Config.EnablePKCE,
+					r.Config.SignInPage,
+					r.Cm,
+					newOAuth2Config,
+					getRedirectionURL,
+					customSignInPage,
+					res,
+					accessForbidden,
+				)
 				middlewares = append(
 					middlewares,
 					loAMid,
@@ -1043,29 +989,115 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				middlewares,
 				identityMiddleware,
 			)
+
+			if r.Config.EnableSigning && !r.Config.NoProxy {
+				signMid = SigningMiddleware(
+					r.Log,
+					r.pat,
+					r.Config.ForwardingDomains,
+				)
+				middlewares = append(
+					middlewares,
+					signMid,
+				)
+			}
+
+			if r.Config.EnableUma || r.Config.EnableOpa {
+				enableUma := r.Config.EnableUma
+				if r.Config.EnableUma && res.NoRedirect {
+					enableUma = false
+
+					r.Log.Warn(
+						"disabling EnableUma for resource, no-redirect=true for resource",
+						zap.String("resource", res.URL),
+					)
+				}
+
+				authzMiddleware := authorizationMiddleware(
+					r.Log,
+					enableUma,
+					r.Config.EnableUmaMethodScope,
+					r.Config.CookieUMAName,
+					r.Config.NoProxy,
+					r.pat,
+					r.Provider,
+					r.IdpClient,
+					r.Config.OpenIDProviderTimeout,
+					r.Config.Realm,
+					r.Config.EnableEncryptedToken,
+					r.Config.ForceEncryptedCookie,
+					r.Config.EncryptionKey,
+					r.Cm,
+					r.Config.EnableOpa,
+					r.Config.OpaTimeout,
+					r.Config.OpaAuthzURL,
+					r.Config.DiscoveryURI,
+					r.Config.ClientID,
+					r.Config.SkipAccessTokenClientIDCheck,
+					r.Config.SkipAccessTokenIssuerCheck,
+					r.Config.EnableCompressToken,
+					r.Config.CompressTokenOnlyAuthScheme,
+					compressTokenPool,
+					getIdentity,
+					accessForbidden,
+				)
+
+				middlewares = []func(http.Handler) http.Handler{
+					authMid,
+					extIDPMid,
+					authFailMiddleware,
+					authzMiddleware,
+					admissionMiddleware,
+				}
+
+				if r.Config.EnableLoA && !res.NoRedirect {
+					middlewares = append(
+						middlewares,
+						loAMid,
+					)
+				}
+
+				middlewares = append(
+					middlewares,
+					identityMiddleware,
+				)
+			}
+
+			if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
+				middlewares = []func(http.Handler) http.Handler{
+					gmiddleware.DenyMiddleware(r.Log, accessForbidden),
+					gmiddleware.ProxyDenyMiddleware(r.Log),
+				}
+			}
+
+			eProt = engine.With(middlewares...)
+			headerRouterMiddleware := gmiddleware.RouteHeaders().
+				SetMatchingType(gmiddleware.RouteHeadersContainsMatcher).
+				Route(
+					constant.AuthorizationHeader,
+					constant.AuthorizationType,
+					eProt.Middlewares().Handler,
+				).
+				Route(
+					"Cookie",
+					r.Config.CookieAccessName+"=",
+					eProt.Middlewares().Handler,
+				).
+				Handler
+
+			hRouter = engine.With(headerRouterMiddleware)
 		}
-
-		eProt := engine.With(middlewares...)
-		headerRouterMiddleware := gmiddleware.RouteHeaders().
-			SetMatchingType(gmiddleware.RouteHeadersContainsMatcher).
-			Route(
-				constant.AuthorizationHeader,
-				constant.AuthorizationType,
-				eProt.Middlewares().Handler,
-			).
-			Route(
-				"Cookie",
-				r.Config.CookieAccessName+"=",
-				eProt.Middlewares().Handler,
-			).
-			Handler
-
-		p := engine.With(headerRouterMiddleware)
 
 		for _, method := range res.Methods {
 			switch {
+			case res.Deny:
+				middlewares := []func(http.Handler) http.Handler{
+					gmiddleware.DenyMiddleware(r.Log, accessForbidden),
+				}
+				denyEngine := engine.With(middlewares...)
+				denyEngine.MethodFunc(method, res.URL, handlers.EmptyHandler)
 			case res.WhiteListedAnon:
-				p.MethodFunc(method, res.URL, handlers.EmptyHandler)
+				hRouter.MethodFunc(method, res.URL, handlers.EmptyHandler)
 			case res.WhiteListed:
 				if r.Config.EnableSigning && !r.Config.NoProxy {
 					signMid = SigningMiddleware(
@@ -1642,14 +1674,12 @@ func (r *OauthProxy) createHTTPListener(config listenerConfig) (net.Listener, er
 			getCertificate = rotate.GetCertificate
 		}
 
-		//nolint:gosec
 		tlsConfig := &tls.Config{
 			GetCertificate: getCertificate,
 			// Causes servers to use Go's default ciphersuite preferences,
 			// which are tuned to avoid attacks. Does nothing on clients.
-			PreferServerCipherSuites: true,
-			NextProtos:               []string{"h2", "http/1.1"},
-			MinVersion:               config.minTLSVersion,
+			NextProtos: []string{"h2", "http/1.1"},
+			MinVersion: config.minTLSVersion,
 		}
 
 		listener = tls.NewListener(listener, tlsConfig)
@@ -1678,7 +1708,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	dialer := (&net.Dialer{
 		KeepAlive: r.Config.UpstreamKeepaliveTimeout,
 		Timeout:   r.Config.UpstreamTimeout,
-	}).Dial
+	}).DialContext
 
 	// are we using a unix socket?
 	if upstream != nil && upstream.Scheme == "unix" {
@@ -1688,7 +1718,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		)
 
 		socketPath := fmt.Sprintf("%s%s", upstream.Host, upstream.Path)
-		dialer = func(_, _ string) (net.Conn, error) {
+		dialer = func(_ context.Context, _, _ string) (net.Conn, error) {
 			return net.Dial("unix", socketPath)
 		}
 
@@ -1767,7 +1797,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	}
 
 	proxy.Tr = &http.Transport{
-		Dial:                  dialer,
+		DialContext:           dialer,
 		Proxy:                 upstreamProxyFunc,
 		DisableKeepAlives:     !r.Config.UpstreamKeepalives,
 		ExpectContinueTimeout: r.Config.UpstreamExpectContinueTimeout,
@@ -1976,7 +2006,6 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *keycloak_client.Clie
 
 	retryType := backoff.WithBackOff(backoff.NewExponentialBackOff())
 
-	//nolint:gosec
 	countOption := backoff.WithMaxTries(uint(r.Config.OpenIDProviderRetryCount))
 	notifyOption := backoff.WithNotify(notify)
 

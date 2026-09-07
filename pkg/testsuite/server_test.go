@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:goconst
 package testsuite_test
 
 import (
@@ -762,7 +763,7 @@ func TestForbiddenTemplate(t *testing.T) {
 	cfg.ForbiddenPage = ForbiddenPagePath
 	cfg.Resources = []*core.Resource{
 		{
-			URL:     "/*",
+			URL:     constant.AllPath,
 			Methods: utils.AllHTTPMethods,
 			Roles:   []string{FakeAdminRole},
 		},
@@ -1452,7 +1453,7 @@ func TestNoProxy(t *testing.T) {
 				c.NoProxy = true
 				c.Resources = []*core.Resource{
 					{
-						URL:     "/*",
+						URL:     constant.AllPath,
 						Methods: utils.AllHTTPMethods,
 						Roles:   []string{"user"},
 					},
@@ -1524,7 +1525,7 @@ func TestAuthorizationTemplate(t *testing.T) {
 	uri := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.AuthorizationURL)
 	cfg.Resources = []*core.Resource{
 		{
-			URL:     "/*",
+			URL:     constant.AllPath,
 			Methods: utils.AllHTTPMethods,
 			Roles:   []string{FakeAdminRole},
 		},
@@ -1956,8 +1957,8 @@ func TestDisableAuthorizationCookie(t *testing.T) {
 		{
 			URI: FakeAdminTestURL,
 			Cookies: []*http.Cookie{
-				{Name: cfg.CookieAccessName, Value: signed},
-				{Name: "mycookie", Value: "myvalue"},
+				{Name: cfg.CookieAccessName, Value: signed}, //nolint:gosec
+				{Name: "mycookie", Value: "myvalue"},        //nolint:gosec
 			},
 			HasToken:                true,
 			ExpectedContentContains: "kc-access=censored; mycookie=myvalue",
@@ -2551,6 +2552,9 @@ func TestMaxBodySize(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					Method:        http.MethodPost,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "method")
+					},
 					FormValues: map[string]string{
 						"password": "test",
 						"username": "test",
@@ -2570,7 +2574,10 @@ func TestMaxBodySize(t *testing.T) {
 					HasToken:      true,
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusBadRequest,
-					Method:        http.MethodPost,
+					ExpectedContent: func(body string, _ int) {
+						assert.Empty(t, body)
+					},
+					Method: http.MethodPost,
 				},
 			},
 		},
@@ -2600,6 +2607,9 @@ func TestMaxBodySize(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedCode:  http.StatusOK,
 					Method:        http.MethodPost,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "method")
+					},
 					FormValues: map[string]string{
 						"password": "test",
 						"username": "test",
@@ -2620,6 +2630,9 @@ func TestMaxBodySize(t *testing.T) {
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusRequestEntityTooLarge,
 					Method:        http.MethodPost,
+					ExpectedContent: func(body string, _ int) {
+						assert.Empty(t, body)
+					},
 					FormValues: map[string]string{
 						"password": "test",
 						"username": "test",
@@ -2797,6 +2810,132 @@ func TestFileRoot(t *testing.T) {
 				}()
 
 				newFakeProxy(cfg, &fakeAuthConfig{})
+			},
+		)
+	}
+}
+
+func TestMaxHeaders(t *testing.T) {
+	cfg := newFakeKeycloakConfig()
+
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
+		{
+			Name: "TestMaxHeadersFiringNoRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = true
+				conf.MaxHeaders = 7
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAdminTestURL,
+					HasToken:      true,
+					ExpectedProxy: false,
+					ExpectedCode:  http.StatusForbidden,
+					Headers: map[string]string{
+						"TEST1": "test1",
+						"TEST2": "test2",
+						"TEST3": "test3",
+						"TEST4": "test4",
+						"TEST5": "test5",
+						"TEST6": "test6",
+					},
+					ExpectedContent: func(body string, _ int) {
+						assert.Empty(t, body)
+					},
+					Method: http.MethodPost,
+				},
+			},
+		},
+		{
+			Name: "TestMaxHeadersNotFiringNoRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = true
+				conf.MaxHeaders = 7
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAdminTestURL,
+					HasToken:      true,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "method")
+					},
+					Method: http.MethodPost,
+				},
+			},
+		},
+		{
+			Name: "TestMaxHeadersFiringRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.MaxHeaders = 7
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAdminTestURL,
+					HasLogin:      true,
+					ExpectedProxy: false,
+					Redirects:     true,
+					Headers: map[string]string{
+						"TEST1": "test1",
+						"TEST2": "test2",
+						"TEST3": "test3",
+						"TEST4": "test4",
+						"TEST5": "test5",
+						"TEST6": "test6",
+					},
+					ExpectedContent: func(body string, _ int) {
+						assert.Empty(t, body)
+					},
+					ExpectedCode: http.StatusForbidden,
+				},
+			},
+		},
+		{
+			Name: "TestMaxHeadersNotFiringRedirects",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.MaxHeaders = 7
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           FakeAdminTestURL,
+					HasLogin:      true,
+					ExpectedProxy: true,
+					Redirects:     true,
+					ExpectedCode:  http.StatusOK,
+				},
+				{
+					URI:           FakeAdminTestURL,
+					HasToken:      true,
+					ExpectedProxy: true,
+					ExpectedCode:  http.StatusOK,
+					Method:        http.MethodPost,
+					ExpectedContent: func(body string, _ int) {
+						assert.Contains(t, body, "method")
+					},
+					FormValues: map[string]string{
+						"password": "test",
+						"username": "test",
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		cfg := *cfg
+
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				testCase.ProxySettings(&cfg)
+				newFakeProxy(&cfg, &fakeAuthConfig{}).RunTests(t, testCase.ExecutionSettings)
 			},
 		)
 	}

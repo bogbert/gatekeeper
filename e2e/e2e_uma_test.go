@@ -1,3 +1,4 @@
+//nolint:goconst
 package e2e_test
 
 import (
@@ -59,6 +60,9 @@ var _ = Describe("UMA Code Flow authorization", func() {
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=false",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--verbose=true",
 			"--enable-uma=true",
 			"--cookie-uma-name=" + umaCookieName,
@@ -202,6 +206,9 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=false",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--enable-uma=true",
 			"--enable-uma-method-scope=true",
 			"--cookie-uma-name=" + umaCookieName,
@@ -256,7 +263,8 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 				rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
 				resp, _ = rClient.R().Get(proxyAddress + umaAllowedPath)
 				Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
-			})
+			},
+		)
 	})
 })
 
@@ -309,6 +317,9 @@ var _ = Describe("UMA no-redirects authorization with forwarding client credenti
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=true",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--enable-uma=true",
 			"--enable-uma-method-scope=true",
 			"--skip-access-token-clientid-check=true",
@@ -442,6 +453,9 @@ var _ = Describe("UMA no-redirects authorization with forwarding direct access g
 			"--client-secret=" + umaTestClientSecret,
 			"--upstream-url=" + localURI + upstreamSvcPort,
 			"--no-redirects=true",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--enable-uma=true",
 			"--enable-uma-method-scope=true",
 			"--skip-access-token-clientid-check=true",
@@ -572,6 +586,9 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 			"--client-id=" + umaTestClient,
 			"--client-secret=" + umaTestClientSecret,
 			"--no-redirects=false",
+			"--enable-default-deny=false",
+			"--enable-default-deny-strict=false",
+			"--resources=uri=/*|roles=uma_authorization,offline_access",
 			"--enable-uma=true",
 			"--enable-uma-method-scope=true",
 			"--no-proxy=true",

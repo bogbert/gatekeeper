@@ -123,6 +123,8 @@ const (
 	DefaultPatRetryCount                 = 5
 	DefaultPatRetryInterval              = 10 * time.Second
 	DefaultOpaTimeout                    = 10 * time.Second
+	DefaultLogSamplingInitial            = 100
+	DefaultLogSamplingAfter              = 100
 
 	ForwardingGrantTypePassword = "password"
 
@@ -142,6 +144,12 @@ const (
 	NegateRegexChar = "!"
 
 	IdentityHeaderEncoding = "UTF-8"
+
+	DoubleSlash    = "//"
+	LowerBackSlash = "%5c"
+	UpperBackSlash = "%5C"
+	LowerSlash     = "%2f"
+	UpperSlash     = "%2F"
 )
 
 //nolint:gochecknoglobals
