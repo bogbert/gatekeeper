@@ -34,6 +34,8 @@ func EntrypointMiddleware(
 	mergeSlashesUpstream bool,
 	pathEscapedSlashes bool,
 	pathEscapedSlashesUpstream bool,
+	stripPathParams bool,
+	stripPathParamsUpstream bool,
 	allowEscapedSlashesPath bool,
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(http.Handler) http.Handler {
@@ -42,8 +44,9 @@ func EntrypointMiddleware(
 		isMergeSame := mergeSlashes == mergeSlashesUpstream
 		isNormalizeSame := normalizePath == normalizePathUpstream
 		isPathEscapeSame := pathEscapedSlashes == pathEscapedSlashesUpstream
+		isStripParamsSame := stripPathParams == stripPathParamsUpstream
 
-		if isMergeSame && isNormalizeSame && isPathEscapeSame {
+		if isMergeSame && isNormalizeSame && isPathEscapeSame && isStripParamsSame {
 			internalEqUpstream = true
 		}
 
@@ -84,6 +87,7 @@ func EntrypointMiddleware(
 				pathEscapedSlashes,
 				mergeSlashes,
 				normalizePath,
+				stripPathParams,
 				normalizedPath,
 			)
 			if err != nil {
@@ -103,6 +107,7 @@ func EntrypointMiddleware(
 					pathEscapedSlashesUpstream,
 					mergeSlashesUpstream,
 					normalizePathUpstream,
+					stripPathParamsUpstream,
 					normalizedPathUpstream,
 				)
 				if err != nil {

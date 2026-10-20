@@ -1086,6 +1086,81 @@ func TestPathNormalizationRedirects(t *testing.T) {
 				},
 			},
 		},
+		{
+			Name: "StripPathParamsEnabled",
+			ProxySettings: func(cfg *config.Config) {
+				cfg.NormalizePath = true
+				cfg.NormalizePathUpstream = true
+				cfg.MergeSlashes = true
+				cfg.MergeSlashesUpstream = true
+				cfg.PathEscapedSlashes = true
+				cfg.PathEscapedSlashesUpstream = true
+				cfg.StripPathParams = true
+				cfg.StripPathParamsUpstream = false
+				cfg.Resources = []*core.Resource{
+					{
+						URL:     "/api/v1/auth*",
+						Methods: utils.AllHTTPMethods,
+						Roles:   []string{"admin"},
+					},
+					{
+						URL:     constant.AllPath,
+						Methods: utils.AllHTTPMethods,
+						Roles:   []string{"user"},
+					},
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:                     "/api/v1/auth/ok",
+					HasToken:                true,
+					Redirects:               true,
+					Roles:                   []string{"admin"},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: `"raw_uri":"/api/v1/auth/ok"`,
+				},
+				{
+					// A Jetty/Servlet-style ";"-delimited path parameter
+					// injected into a protected segment must not let the
+					// request slip past the stricter /api/v1/auth* rule
+					// into the permissive catch-all.
+					URI:          "/api/v1;foo=1/auth;jsessionid=X/some",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user"},
+					ExpectedCode: http.StatusForbidden,
+				},
+				{
+					// With the admin role, matching now correctly resolves
+					// the path parameters, while the ORIGINAL (unstripped)
+					// request line is still forwarded upstream intact,
+					// preserving e.g. a legitimate jsessionid.
+					URI:                     "/api/v1;foo=1/auth;jsessionid=X/some",
+					HasToken:                true,
+					Redirects:               true,
+					Roles:                   []string{"admin"},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: `"raw_uri":"/api/v1;foo=1/auth;jsessionid=X/some"`,
+				},
+				{
+					// A path parameter masking a dot-segment must still be
+					// resolved: "..;foo=1" is recognized as ".." once the
+					// parameter is stripped, keeping this request OUT of
+					// /api/v1/auth* and under the permissive catch-all -
+					// while the upstream-bound path, left unstripped, is
+					// forwarded exactly as received.
+					URI:                     "/api/v1/auth/..;foo=1/ok",
+					HasToken:                true,
+					Redirects:               true,
+					Roles:                   []string{"user"},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: `"raw_uri":"/api/v1/auth/..;foo=1/ok"`,
+				},
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -1752,6 +1827,81 @@ func TestPathNormalizationNoRedirects(t *testing.T) {
 					HasToken:     true,
 					Redirects:    true,
 					ExpectedCode: http.StatusForbidden,
+				},
+			},
+		},
+		{
+			Name: "StripPathParamsEnabled",
+			ProxySettings: func(cfg *config.Config) {
+				cfg.NormalizePath = true
+				cfg.NormalizePathUpstream = true
+				cfg.MergeSlashes = true
+				cfg.MergeSlashesUpstream = true
+				cfg.PathEscapedSlashes = true
+				cfg.PathEscapedSlashesUpstream = true
+				cfg.StripPathParams = true
+				cfg.StripPathParamsUpstream = false
+				cfg.Resources = []*core.Resource{
+					{
+						URL:     "/api/v1/auth*",
+						Methods: utils.AllHTTPMethods,
+						Roles:   []string{"admin"},
+					},
+					{
+						URL:     constant.AllPath,
+						Methods: utils.AllHTTPMethods,
+						Roles:   []string{"user"},
+					},
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:                     "/api/v1/auth/ok",
+					HasToken:                true,
+					Redirects:               true,
+					Roles:                   []string{"admin"},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: `"raw_uri":"/api/v1/auth/ok"`,
+				},
+				{
+					// A Jetty/Servlet-style ";"-delimited path parameter
+					// injected into a protected segment must not let the
+					// request slip past the stricter /api/v1/auth* rule
+					// into the permissive catch-all.
+					URI:          "/api/v1;foo=1/auth;jsessionid=X/some",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user"},
+					ExpectedCode: http.StatusForbidden,
+				},
+				{
+					// With the admin role, matching now correctly resolves
+					// the path parameters, while the ORIGINAL (unstripped)
+					// request line is still forwarded upstream intact,
+					// preserving e.g. a legitimate jsessionid.
+					URI:                     "/api/v1;foo=1/auth;jsessionid=X/some",
+					HasToken:                true,
+					Redirects:               true,
+					Roles:                   []string{"admin"},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: `"raw_uri":"/api/v1;foo=1/auth;jsessionid=X/some"`,
+				},
+				{
+					// A path parameter masking a dot-segment must still be
+					// resolved: "..;foo=1" is recognized as ".." once the
+					// parameter is stripped, keeping this request OUT of
+					// /api/v1/auth* and under the permissive catch-all -
+					// while the upstream-bound path, left unstripped, is
+					// forwarded exactly as received.
+					URI:                     "/api/v1/auth/..;foo=1/ok",
+					HasToken:                true,
+					Redirects:               true,
+					Roles:                   []string{"user"},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: `"raw_uri":"/api/v1/auth/..;foo=1/ok"`,
 				},
 			},
 		},

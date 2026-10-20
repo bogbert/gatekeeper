@@ -155,6 +155,8 @@ type Config struct {
 	MergeSlashesUpstream               bool              `env:"MERGE_SLASHES_UPSTREAM" json:"merge-slashes-upstream" usage:"merges slashes for path to upstream" yaml:"merge-slashes-upstream"`
 	PathEscapedSlashes                 bool              `env:"PATH_ESCAPED_SLASHES" json:"path-escaped-slashes" usage:"escape slashes in path, means preserve hex encoding, at start of processing chain, used in internal chains" yaml:"path-escaped-slashes"`
 	PathEscapedSlashesUpstream         bool              `env:"PATH_ESCAPED_SLASHES_UPSTREAM" json:"path-escaped-slashes-upstream" usage:"escape slashes in path, means preserve hex encoding for path sent upstream" yaml:"path-escaped-slashes-upstream"`
+	StripPathParams                    bool              `env:"STRIP_PATH_PARAMS" json:"strip-path-params" usage:"strips \";\" delimited path parameters (e.g. as used by Jetty/Servlet containers) from every path segment used in internal chains" yaml:"strip-path-params"`
+	StripPathParamsUpstream            bool              `env:"STRIP_PATH_PARAMS_UPSTREAM" json:"strip-path-params-upstream" usage:"strips \";\" delimited path parameters from every path segment for path sent upstream" yaml:"strip-path-params-upstream"`
 	EnableProfiling                    bool              `env:"ENABLE_PROFILING" json:"enable-profiling" usage:"switching on the golang profiling via pprof on /debug/pprof, /debug/pprof/heap etc" yaml:"enable-profiling"`
 	EnableIDPSessionCheck              bool              `env:"ENABLE_IDP_SESSION_CHECK" json:"enable-idp-session-check" usage:"during token validation it also checks if user session is still present, useful for multiapp logout" yaml:"enable-idp-session-check"`
 	EnabledSelfSignedTLS               bool              `env:"ENABLE_SELF_SIGNED_TLS" json:"enable-self-signed-tls" usage:"create self signed certificates for the proxy" yaml:"enable-self-signed-tls"`
@@ -298,6 +300,8 @@ func NewDefaultConfig() *Config {
 		MergeSlashesUpstream:             true,
 		PathEscapedSlashes:               false,
 		PathEscapedSlashesUpstream:       false,
+		StripPathParams:                  true,
+		StripPathParamsUpstream:          false,
 		AllowEscapedSlashesPath:          false,
 	}
 }

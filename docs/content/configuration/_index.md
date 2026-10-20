@@ -33,6 +33,8 @@ weight: 2
 |    \--merge-slashes-upstream                | merges slashes for path to upstream | true | PROXY_MERGE_SLASHES_UPSTREAM
 |    \--path-escaped-slashes                  | escape slashes in path, means preserve hex encoding, at start of processing chain, used in internal chains | false | PROXY_ESCAPED_SLASHES
 |    \--path-escaped-slashes-upstream         | escape slashes, means preserve hex encoding for path sent upstream | false | PROXY_ESCAPED_SLASHES_UPSTREAM
+|    \--strip-path-params                     | strips ";" delimited path parameters (e.g. as used by Jetty/Servlet containers) from every path segment used in internal chains | true | PROXY_STRIP_PATH_PARAMS
+|    \--strip-path-params-upstream            | strips ";" delimited path parameters from every path segment for path sent upstream | false | PROXY_STRIP_PATH_PARAMS_UPSTREAM
 |    \--upstream-proxy                        | proxy for communication with upstream | | PROXY_UPSTREAM_PROXY
 |    \--upstream-no-proxy                     | list of upstream destinations which should be not proxied | | PROXY_UPSTREAM_NO_PROXY
 |    \--base-uri value                        | common prefix for all URIs | | PROXY_BASE_URI

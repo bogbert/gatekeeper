@@ -999,10 +999,43 @@ func RemovePathDotSegments(path string) string {
 	return path
 }
 
+// RemovePathParams strips ";"-delimited path parameters from every path
+// segment, e.g. turning "/app;jsessionid=X/admin;foo=1/page" into
+// "/app/admin/page".
+//
+// Servlet containers such as Jetty accept a ";name=value" suffix after any
+// path segment (historically used for jsessionid-based session tracking) and
+// strip it before making their own routing/dispatch decisions. If Gatekeeper
+// matches its resource rules against the path with these parameters still
+// present, an attacker can inject a ";..." into a protected segment so the
+// literal request text no longer matches a restrictive resource rule, while
+// the backend still dispatches the request to the resource that rule was
+// meant to guard.
+//
+// This must run before RemovePathDotSegments: a path parameter can otherwise
+// mask a "." or ".." segment (e.g. "/secure/..;foo=1/admin"), hiding a
+// directory-traversal sequence from dot-segment removal.
+func RemovePathParams(path string) string {
+	if path == "" {
+		return path
+	}
+
+	segments := strings.Split(path, "/")
+
+	for i, segment := range segments {
+		if idx := strings.IndexByte(segment, ';'); idx != -1 {
+			segments[i] = segment[:idx]
+		}
+	}
+
+	return strings.Join(segments, "/")
+}
+
 func NormalizePath(
 	pathEscapedSlashes bool,
 	mergeSlashes bool,
 	normalizePath bool,
+	stripPathParams bool,
 	path string,
 ) (string, error) {
 	var err error
@@ -1023,6 +1056,14 @@ func NormalizePath(
 			path, err = UnescapePath(path, SlashOmit)
 			if err != nil {
 				return "", err
+			}
+
+			if stripPathParams {
+				path = RemovePathParams(path)
+
+				if mergeSlashes {
+					path = ReplaceDuplicateChar(path, '/')
+				}
 			}
 
 			path = RemovePathDotSegments(path)

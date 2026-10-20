@@ -757,6 +757,7 @@ func BenchmarkNormalizePath(bench *testing.B) {
 			false,
 			true,
 			true,
+			true,
 			data,
 		)
 	}
@@ -924,6 +925,63 @@ func TestRemovePathDotSegment(t *testing.T) {
 	}
 }
 
+func TestRemovePathParams(t *testing.T) {
+	tests := []struct {
+		Name           string
+		Input          string
+		ExpectedOutput string
+	}{
+		{
+			Name:           "NoParams",
+			Input:          "/a/b/c",
+			ExpectedOutput: "/a/b/c",
+		},
+		{
+			Name:           "TrailingParam",
+			Input:          "/app/admin;foo=bar",
+			ExpectedOutput: "/app/admin",
+		},
+		{
+			Name:           "ParamOnEverySegment",
+			Input:          "/app;jsessionid=X/admin;foo=1/page",
+			ExpectedOutput: "/app/admin/page",
+		},
+		{
+			Name:           "WholeSegmentIsParam",
+			Input:          "/app/;jsessionid=X/page",
+			ExpectedOutput: "/app//page",
+		},
+		{
+			Name:           "ParamHidingDotSegment",
+			Input:          "/secure/..;foo=1/admin",
+			ExpectedOutput: "/secure/../admin",
+		},
+		{
+			Name:           "EmptyPath",
+			Input:          "",
+			ExpectedOutput: "",
+		},
+		{
+			Name:           "SemicolonWithNoValue",
+			Input:          "/app/admin;",
+			ExpectedOutput: "/app/admin",
+		},
+	}
+
+	for _, testCase := range tests {
+		output := utils.RemovePathParams(testCase.Input)
+		assert.Equal(
+			t,
+			testCase.ExpectedOutput,
+			output,
+			"Case: %s, expected output: %s, got: %s",
+			testCase.Name,
+			testCase.ExpectedOutput,
+			output,
+		)
+	}
+}
+
 func TestReplaceDuplicateChar(t *testing.T) {
 	tests := []struct {
 		Name           string
@@ -1000,6 +1058,23 @@ func TestReplaceDuplicateChar(t *testing.T) {
 	}
 }
 
+func TestNormalizePathStripParams(t *testing.T) {
+	// A ";"-delimited path parameter (Jetty/Servlet style, e.g. jsessionid)
+	// can hide a ".." segment from dot-segment removal unless path
+	// parameters are stripped first. This verifies both that the hidden
+	// traversal is resolved when stripPathParams is enabled, and that it
+	// is NOT resolved when disabled (demonstrating the gap it closes).
+	const input = "/secure/..;foo=1/admin"
+
+	stripped, err := utils.NormalizePath(false, true, true, true, input)
+	assert.NoError(t, err)
+	assert.Equal(t, "/admin", stripped)
+
+	notStripped, err := utils.NormalizePath(false, true, true, false, input)
+	assert.NoError(t, err)
+	assert.Equal(t, "/secure/..;foo=1/admin", notStripped)
+}
+
 func FuzzNormalizePath(f *testing.F) {
 	seeds := []string{
 		"/a/b/c",
@@ -1016,7 +1091,7 @@ func FuzzNormalizePath(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, path string) {
-		_, err := utils.NormalizePath(false, true, true, path)
+		_, err := utils.NormalizePath(false, true, true, true, path)
 		if err != nil {
 			_, ok := errors.AsType[utils.UnescapeError](err)
 			if !ok {
