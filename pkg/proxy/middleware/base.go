@@ -78,6 +78,11 @@ func EntrypointMiddleware(
 				normalizedPath = req.URL.Path
 			}
 
+			if (stripPathParams || stripPathParamsUpstream) && utils.HasPathParamDotSegment(normalizedPath) {
+				accessForbidden(wrt, req)
+				return
+			}
+
 			scope.Logger = logger
 
 			logger.Debug("Original, received path", zap.String("path", originalPath))

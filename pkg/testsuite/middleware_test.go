@@ -1145,19 +1145,31 @@ func TestPathNormalizationRedirects(t *testing.T) {
 					ExpectedContentContains: `"raw_uri":"/api/v1;foo=1/auth;jsessionid=X/some"`,
 				},
 				{
-					// A path parameter masking a dot-segment must still be
-					// resolved: "..;foo=1" is recognized as ".." once the
-					// parameter is stripped, keeping this request OUT of
-					// /api/v1/auth* and under the permissive catch-all -
-					// while the upstream-bound path, left unstripped, is
-					// forwarded exactly as received.
-					URI:                     "/api/v1/auth/..;foo=1/ok",
-					HasToken:                true,
-					Redirects:               true,
-					Roles:                   []string{"user"},
-					ExpectedProxy:           true,
-					ExpectedCode:            http.StatusOK,
-					ExpectedContentContains: `"raw_uri":"/api/v1/auth/..;foo=1/ok"`,
+					// A path parameter masking a dot-segment is rejected:
+					// "..;foo=1" is ".." for the internal (stripped) path
+					// but a plain segment for the upstream path, so both
+					// paths could resolve to different resources.
+					URI:          "/api/v1/auth/..;foo=1/ok",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user", "admin"},
+					ExpectedCode: http.StatusForbidden,
+				},
+				{
+					// Without the rejection this would be matched as "/"
+					// (catch-all) while "/api/v1/auth/x/" is sent upstream.
+					URI:          "/api/v1/auth/x/..;y/..",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user"},
+					ExpectedCode: http.StatusForbidden,
+				},
+				{
+					URI:          "/api/v1/%2e%2e;y/v1/auth/x",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user", "admin"},
+					ExpectedCode: http.StatusForbidden,
 				},
 			},
 		},
@@ -1889,19 +1901,31 @@ func TestPathNormalizationNoRedirects(t *testing.T) {
 					ExpectedContentContains: `"raw_uri":"/api/v1;foo=1/auth;jsessionid=X/some"`,
 				},
 				{
-					// A path parameter masking a dot-segment must still be
-					// resolved: "..;foo=1" is recognized as ".." once the
-					// parameter is stripped, keeping this request OUT of
-					// /api/v1/auth* and under the permissive catch-all -
-					// while the upstream-bound path, left unstripped, is
-					// forwarded exactly as received.
-					URI:                     "/api/v1/auth/..;foo=1/ok",
-					HasToken:                true,
-					Redirects:               true,
-					Roles:                   []string{"user"},
-					ExpectedProxy:           true,
-					ExpectedCode:            http.StatusOK,
-					ExpectedContentContains: `"raw_uri":"/api/v1/auth/..;foo=1/ok"`,
+					// A path parameter masking a dot-segment is rejected:
+					// "..;foo=1" is ".." for the internal (stripped) path
+					// but a plain segment for the upstream path, so both
+					// paths could resolve to different resources.
+					URI:          "/api/v1/auth/..;foo=1/ok",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user", "admin"},
+					ExpectedCode: http.StatusForbidden,
+				},
+				{
+					// Without the rejection this would be matched as "/"
+					// (catch-all) while "/api/v1/auth/x/" is sent upstream.
+					URI:          "/api/v1/auth/x/..;y/..",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user"},
+					ExpectedCode: http.StatusForbidden,
+				},
+				{
+					URI:          "/api/v1/%2e%2e;y/v1/auth/x",
+					HasToken:     true,
+					Redirects:    true,
+					Roles:        []string{"user", "admin"},
+					ExpectedCode: http.StatusForbidden,
 				},
 			},
 		},

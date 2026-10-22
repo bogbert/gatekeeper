@@ -1075,6 +1075,79 @@ func TestNormalizePathStripParams(t *testing.T) {
 	assert.Equal(t, "/secure/..;foo=1/admin", notStripped)
 }
 
+func TestNormalizePathStripParamsRawPath(t *testing.T) {
+	tests := []struct {
+		Name           string
+		NormalizePath  bool
+		Input          string
+		ExpectedOutput string
+	}{
+		{
+			// an encoded slash inside a parameter is dropped with it,
+			// it must not become a path separator
+			Name:           "EncodedSlashInParam",
+			NormalizePath:  true,
+			Input:          "/gtweb;x%2F..%2F..%2Fpublic/signin.html",
+			ExpectedOutput: "/gtweb/signin.html",
+		},
+		{
+			// "%3B" is part of the segment name, not a parameter delimiter
+			Name:           "EncodedSemicolonKept",
+			NormalizePath:  true,
+			Input:          "/gtweb%3Bx/a",
+			ExpectedOutput: "/gtweb;x/a",
+		},
+		{
+			Name:           "EmptySegmentMerged",
+			NormalizePath:  true,
+			Input:          "/;x/gtweb",
+			ExpectedOutput: "/gtweb",
+		},
+		{
+			Name:           "WithoutNormalizePath",
+			NormalizePath:  false,
+			Input:          "/app;jsessionid=X/admin",
+			ExpectedOutput: "/app/admin",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.Name, func(t *testing.T) {
+			output, err := utils.NormalizePath(false, true, testCase.NormalizePath, true, testCase.Input)
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.ExpectedOutput, output)
+		})
+	}
+}
+
+func TestHasPathParamDotSegment(t *testing.T) {
+	tests := []struct {
+		Input    string
+		Expected bool
+	}{
+		{Input: "/app;jsessionid=X/admin", Expected: false},
+		{Input: "/secure/..;foo=1/admin", Expected: true},
+		{Input: "/secure/.;foo=1/admin", Expected: true},
+		{Input: "/gtweb/x/..;y/..", Expected: true},
+		{Input: "/api/%2e%2e;y/admin", Expected: true},
+		{Input: "/api/%2E.;y/admin", Expected: true},
+		{Input: "/api/...;y/admin", Expected: false},
+		{Input: "/api/..%3By/admin", Expected: false},
+		{Input: "/api/../admin", Expected: false},
+		{Input: "", Expected: false},
+	}
+
+	for _, testCase := range tests {
+		assert.Equal(
+			t,
+			testCase.Expected,
+			utils.HasPathParamDotSegment(testCase.Input),
+			"input: %s",
+			testCase.Input,
+		)
+	}
+}
+
 func FuzzNormalizePath(f *testing.F) {
 	seeds := []string{
 		"/a/b/c",

@@ -1012,9 +1012,11 @@ func RemovePathDotSegments(path string) string {
 // the backend still dispatches the request to the resource that rule was
 // meant to guard.
 //
-// This must run before RemovePathDotSegments: a path parameter can otherwise
-// mask a "." or ".." segment (e.g. "/secure/..;foo=1/admin"), hiding a
-// directory-traversal sequence from dot-segment removal.
+// This must run on the raw (still percent-encoded) path, before any
+// unescaping, like servlet containers do: only a literal ";" starts a path
+// parameter ("%3B" is part of the segment name), and an encoded slash inside
+// a parameter (";x%2F..%2Fpublic") is dropped with the parameter instead of
+// becoming a path separator.
 func RemovePathParams(path string) string {
 	if path == "" {
 		return path
@@ -1031,6 +1033,32 @@ func RemovePathParams(path string) string {
 	return strings.Join(segments, "/")
 }
 
+// HasPathParamDotSegment reports whether a path parameter is attached to a
+// "." or ".." segment (e.g. "/secure/..;foo=1/admin", "/%2e%2e;x/admin").
+// Such a segment is a dot-segment for a servlet container but a plain name
+// for a backend or a normalization chain that does not strip parameters, so
+// the internal and upstream paths could resolve to different resources.
+// No legitimate client sends it, requests containing it should be rejected.
+func HasPathParamDotSegment(path string) bool {
+	for segment := range strings.SplitSeq(path, "/") {
+		idx := strings.IndexByte(segment, ';')
+		if idx == -1 {
+			continue
+		}
+
+		name := segment[:idx]
+		if unescaped, err := url.PathUnescape(name); err == nil {
+			name = unescaped
+		}
+
+		if name == "." || name == ".." {
+			return true
+		}
+	}
+
+	return false
+}
+
 func NormalizePath(
 	pathEscapedSlashes bool,
 	mergeSlashes bool,
@@ -1041,6 +1069,10 @@ func NormalizePath(
 	var err error
 
 	if len(path) > 0 {
+		if stripPathParams {
+			path = RemovePathParams(path)
+		}
+
 		if !pathEscapedSlashes {
 			path, err = UnescapePath(path, SlashOnly)
 			if err != nil {
@@ -1056,14 +1088,6 @@ func NormalizePath(
 			path, err = UnescapePath(path, SlashOmit)
 			if err != nil {
 				return "", err
-			}
-
-			if stripPathParams {
-				path = RemovePathParams(path)
-
-				if mergeSlashes {
-					path = ReplaceDuplicateChar(path, '/')
-				}
 			}
 
 			path = RemovePathDotSegments(path)
